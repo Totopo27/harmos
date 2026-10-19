@@ -5,8 +5,14 @@ This repository is governed by rigorous engineering practices, test-driven devel
 ## Hard Rules
 
 - **Zero Hardcoding**: Never assume or hardcode inlet/outlet numbers. Always validate and resolve types via `core/schema/max_contracts.json` or `core/compiler/contract_engine.py`.
-- **Privacy & Security**: Never commit absolute host paths (`C:\...`, `D:\...`, `Users\...`) or local execution scripts (`*.ps1`). Adhere strictly to `docs/PROTOCOLO_SEGURIDAD_Y_PUBLICACION_GIT.md`.
+- **Privacy & Security**: Never commit absolute host paths or local execution scripts (`*.ps1`). Always run `python scripts/check.py` before any commit or push.
 - **Domain Separation**: Harmos is an agnostic meta-compiler framework. Downstream suites (e.g. Wilson tuning, TET circles) are benchmarks for stress-testing, not the core framework (see `GLOSSARY.md` and `docs/adr/0001-separacion-motor-y-benchmarks.md`).
+
+## Canonical Commands
+
+- **Run Guardrail (Tests + Schemas + Privacy)**: `python scripts/check.py`
+- **Run Tests Only**: `python -m unittest discover tests`
+- **Compile IR to Max Package**: `python -m core.compiler.cli <path.ir.json> --out <output_dir>`
 
 ## Agent skills
 
