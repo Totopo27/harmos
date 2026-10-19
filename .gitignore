@@ -1,0 +1,20 @@
+# Local AI runtime state
+.atl/
+
+# OS / Screenshots / Evidence dumps
+*.png
+*.jpg
+*.jpeg
+
+# Submodules / Sub-repositories managed externally
+c74support/min-devkit/
+
+# Build artifacts
+build/
+*.obj
+*.exe
+*.recipe
+*.tlog
+
+# Local test / automation scripts
+*.ps1

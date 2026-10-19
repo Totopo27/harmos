@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MaxObjectIntermediateRepresentation",
+  "description": "Esquema universal de Representación Intermedia (IR) para objetos de Max MSP.",
+  "type": "object",
+  "required": ["object_name", "category", "target_runtime", "inlets", "outlets"],
+  "properties": {
+    "object_name": {
+      "type": "string",
+      "description": "Nombre canónico del objeto en Max (ej. wilson.core, wilson.hexslider)"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["control", "dsp", "ui", "data_structure"]
+    },
+    "archetype_reference": {
+      "type": "string",
+      "description": "Objeto nativo de Max tomado como arquetipo funcional (ej. kslider, dict, coll, expr)"
+    },
+    "target_runtime": {
+      "type": "string",
+      "enum": ["c_classic", "cpp_min_devkit", "node_for_max", "js_painter_v8"]
+    },
+    "thread_safety": {
+      "type": "string",
+      "enum": ["main_thread_only", "scheduler_thread", "audio_dsp_perform"]
+    },
+    "inlets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "description"],
+        "properties": {
+          "id": { "type": "integer" },
+          "type": { "type": "string", "enum": ["int", "float", "symbol", "list", "anything", "signal"] },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "outlets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "description"],
+        "properties": {
+          "id": { "type": "integer" },
+          "type": { "type": "string", "enum": ["int", "float", "symbol", "list", "anything", "signal"] },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "default": {},
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string" },
+          "arguments": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "../../core/schema/max_object_ir.schema.json",
+  "object_name": "micro.mpe",
+  "category": "control",
+  "archetype_reference": "midiformat",
+  "target_runtime": "cpp_min_devkit",
+  "thread_safety": "scheduler_thread",
+  "inlets": [
+    {
+      "id": 0,
+      "type": "float",
+      "description": "Frecuencia en Hz de la nota microtonal entrante"
+    },
+    {
+      "id": 1,
+      "type": "int",
+      "description": "Velocity de la nota (>0 para Note-On, 0 para Note-Off)"
+    }
+  ],
+  "outlets": [
+    {
+      "id": 0,
+      "type": "list",
+      "description": "Mensajes formateados para midiformat / midiout: [tipo, valor, canal]"
+    },
+    {
+      "id": 1,
+      "type": "int",
+      "description": "Canal MPE asignado para la nota activa (2 a 16)"
+    },
+    {
+      "id": 2,
+      "type": "float",
+      "description": "Desviación en cents calculada respecto a la nota MIDI base"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "pitchbend_range",
+      "type": "int",
+      "default": 48,
+      "description": "Rango de pitch-bend en semitonos configurado en el sintetizador MPE (típicamente 48 o 2)"
+    },
+    {
+      "name": "channel_min",
+      "type": "int",
+      "default": 2,
+      "description": "Primer canal MPE para voces por nota (estándar MPE: 2)"
+    },
+    {
+      "name": "channel_max",
+      "type": "int",
+      "default": 16,
+      "description": "Último canal MPE para voces por nota (estándar MPE: 16)"
+    }
+  ],
+  "messages": [
+    {
+      "name": "panic",
+      "description": "Envía All Notes Off y Pitch Bend neutral (8192) en todos los canales MPE"
+    }
+  ]
+}

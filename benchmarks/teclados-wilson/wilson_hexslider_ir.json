@@ -1,0 +1,123 @@
+{
+  "$schema": "../../core/schema/max_object_ir.schema.json",
+  "object_name": "wilson.hexslider",
+  "category": "ui",
+  "archetype_reference": "kslider",
+  "target_runtime": "cpp_min_devkit",
+  "thread_safety": "main_thread_only",
+  "inlets": [
+    {
+      "id": 0,
+      "type": "list",
+      "description": "Entrada de control: mensaje (highlight hex_index state) o lista de frecuencias para mapear a la retícula"
+    },
+    {
+      "id": 1,
+      "type": "int",
+      "description": "Velocidad predeterminada para las notas generadas al hacer clic (0-127)"
+    }
+  ],
+  "outlets": [
+    {
+      "id": 0,
+      "type": "float",
+      "description": "Pitch / Frecuencia / Ratio de la celda hexagonal pulsada (Outlet izquierdo, convención kslider)"
+    },
+    {
+      "id": 1,
+      "type": "int",
+      "description": "Velocity: >0 al presionar / entrar a la celda, 0 al soltar / salir"
+    },
+    {
+      "id": 2,
+      "type": "list",
+      "description": "Metadatos: [hex_id, col, row, zone_degree] para análisis o ruteo avanzado"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "cols",
+      "type": "int",
+      "default": 39,
+      "description": "Número de columnas en la retícula hexagonal"
+    },
+    {
+      "name": "rows",
+      "type": "int",
+      "default": 25,
+      "description": "Número de filas en la retícula hexagonal"
+    },
+    {
+      "name": "cell_size",
+      "type": "float",
+      "default": 14.0,
+      "description": "Radio / tamaño de cada celda hexagonal en píxeles"
+    },
+    {
+      "name": "default_color",
+      "type": "color",
+      "default": [0.12, 0.12, 0.14, 1.0],
+      "description": "Color base de las celdas inactivas"
+    },
+    {
+      "name": "active_color",
+      "type": "color",
+      "default": [0.82, 0.0, 0.0, 1.0],
+      "description": "Color de celda presionada (Active note feedback)"
+    },
+    {
+      "name": "base_freq",
+      "type": "float",
+      "default": 261.625565,
+      "description": "Frecuencia fundamental en Hz de la nota base (C4)"
+    },
+    {
+      "name": "octave_offset",
+      "type": "int",
+      "default": 0,
+      "range": [-4, 4],
+      "description": "Desplazamiento general de octavas"
+    },
+    {
+      "name": "temperament_mode",
+      "type": "symbol",
+      "default": "edo",
+      "enum": ["edo", "custom_ratios"],
+      "description": "Modo de temperamento: divisiones iguales o ratios de entonación justa"
+    },
+    {
+      "name": "edo_divisions",
+      "type": "float",
+      "default": 31.0,
+      "description": "Divisiones de temperamento igual de la octava (EDO: 12, 19, 31, 41, 53, etc.)"
+    },
+    {
+      "name": "step_x",
+      "type": "int",
+      "default": 1,
+      "description": "Pasos de escala que avanza cada columna horizontal"
+    },
+    {
+      "name": "step_y",
+      "type": "int",
+      "default": 5,
+      "description": "Pasos de escala que avanza cada fila vertical (intervalo armónico 2D)"
+    }
+  ],
+  "messages": [
+    {
+      "name": "set_ratios",
+      "arguments": "list of floats",
+      "description": "Carga una lista de ratios armónicos para afinación pura (Just Intonation / Wilson)"
+    },
+    {
+      "name": "clear",
+      "description": "Desactiva todas las celdas iluminadas y reinicia el estado visual"
+    },
+    {
+      "name": "set_scale",
+      "arguments": "list of ratios or frequencies",
+      "description": "Asigna el mapa de frecuencias a las celdas de la grilla"
+    }
+  ]
+}

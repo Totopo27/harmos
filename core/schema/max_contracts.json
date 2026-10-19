@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MaxObjectContractRules",
+  "description": "Especificación estricta de contratos de entradas y salidas de Max MSP para generación dinámica sin hardcoding.",
+  "objects": {
+    "midiformat": {
+      "inlets": {
+        "0": { "name": "pitch", "type": "int", "range": [0, 127] },
+        "1": { "name": "velocity", "type": "int", "range": [0, 127] },
+        "2": { "name": "poly_aftertouch", "type": "int", "range": [0, 127] },
+        "3": { "name": "control_change", "type": "list", "format": "[cc_num, value]" },
+        "4": { "name": "program_change", "type": "int", "range": [1, 128] },
+        "5": { "name": "pitch_bend", "type": "int", "range": [0, 16383], "center": 8192 },
+        "6": { "name": "channel", "type": "int", "range": [1, 16] }
+      },
+      "outlets": {
+        "0": { "name": "midi_raw_bytes", "type": "int" }
+      }
+    },
+    "makenote": {
+      "inlets": {
+        "0": { "name": "pitch", "type": "int" },
+        "1": { "name": "velocity", "type": "int" },
+        "2": { "name": "duration_ms", "type": "int" }
+      },
+      "outlets": {
+        "0": { "name": "pitch_out", "type": "int" },
+        "1": { "name": "velocity_out", "type": "int" }
+      }
+    },
+    "micro.mpe": {
+      "inlets": {
+        "0": { "name": "frequency_hz", "type": "float" },
+        "1": { "name": "velocity", "type": "int" }
+      },
+      "outlets": {
+        "0": { "name": "midi_note_list", "type": "list", "format": "[pitch, velocity, channel]" },
+        "1": { "name": "channel_assigned", "type": "int" },
+        "2": { "name": "cents_deviation", "type": "float" }
+      }
+    },
+    "tet.inversion": {
+      "inlets": {
+        "0": { "name": "index_sum", "type": "int", "range": [0, 71] },
+        "1": { "name": "divisions", "type": "int", "range": [3, 72] }
+      },
+      "outlets": {
+        "0": { "name": "pairs_list", "type": "list", "format": "[i, partner, ...]" },
+        "1": { "name": "fixed_points", "type": "list", "format": "[fixed_note...]" },
+        "2": { "name": "symmetry_count", "type": "int" }
+      }
+    }
+  }
+}

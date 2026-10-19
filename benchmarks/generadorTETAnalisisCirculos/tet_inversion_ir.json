@@ -1,0 +1,77 @@
+{
+  "$schema": "../../core/schema/max_object_ir.schema.json",
+  "object_name": "tet.inversion",
+  "category": "Math / Microtonal Symmetry",
+  "archetype": "expr",
+  "target_runtime": "js",
+  "description": "Calculador de particion de pares de inversion y puntos fijos para sistemas n-TET (3 a 72 divisiones por octava).",
+  "inlets": [
+    {
+      "id": 0,
+      "name": "index_sum",
+      "type": "int",
+      "description": "Suma de indices S para inversion I_xy (0 a divisions - 1), o 'bang' para recalcular.",
+      "default": 0
+    },
+    {
+      "id": 1,
+      "name": "divisions",
+      "type": "int",
+      "description": "Numero de divisiones por octava n-TET (rango 3 a 72).",
+      "default": 19
+    },
+    {
+      "id": 2,
+      "name": "base_freq",
+      "type": "float",
+      "description": "Frecuencia de referencia C4 en Hz.",
+      "default": 261.625565
+    }
+  ],
+  "outlets": [
+    {
+      "id": 0,
+      "name": "pairs_list",
+      "type": "list",
+      "description": "Lista aplanada de pares de inversion [i1, partner1, i2, partner2, ...]."
+    },
+    {
+      "id": 1,
+      "name": "fixed_points",
+      "type": "list",
+      "description": "Lista de grados que actuan como puntos fijos (ejes de simetria)."
+    },
+    {
+      "id": 2,
+      "name": "fixed_frequencies",
+      "type": "list",
+      "description": "Frecuencias calculadas en Hz correspondientes a los puntos fijos."
+    },
+    {
+      "id": 3,
+      "name": "symmetry_count",
+      "type": "int",
+      "description": "Numero total de pares de simetria calculados."
+    }
+  ],
+  "attributes": [
+    {
+      "name": "divisions",
+      "type": "int",
+      "default": 19,
+      "description": "Numero de divisiones por octava n-TET (3 a 72)."
+    },
+    {
+      "name": "index_sum",
+      "type": "int",
+      "default": 0,
+      "description": "Suma de indices S."
+    },
+    {
+      "name": "base_freq",
+      "type": "float",
+      "default": 261.625565,
+      "description": "Frecuencia de referencia C4 en Hz."
+    }
+  ]
+}

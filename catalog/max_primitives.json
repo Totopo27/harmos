@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Max Primitives Catalog",
+  "description": "Catálogo canónico de objetos nativos de Max MSP para evitar reinvención de la rueda durante la traducción.",
+  "categories": {
+    "math_and_logic": [
+      { "name": "+", "description": "Suma de números enteros o flotantes" },
+      { "name": "-", "description": "Resta" },
+      { "name": "*", "description": "Multiplicación" },
+      { "name": "/", "description": "División" },
+      { "name": "%", "description": "Módulo / residuo" },
+      { "name": "expr", "description": "Evaluador de expresiones matemáticas complejas en C" },
+      { "name": "scale", "description": "Mapeo y escalado lineal o exponencial entre rangos" }
+    ],
+    "dsp_audio": [
+      { "name": "cycle~", "description": "Oscilador sinusoidal por tabla de ondas" },
+      { "name": "phasor~", "description": "Rampa de diente de sierra / generador de fase (0 a 1)" },
+      { "name": "mtof~", "description": "Conversión de MIDI a frecuencia en Hz en tiempo real DSP" },
+      { "name": "ftom~", "description": "Conversión de frecuencia en Hz a número de nota MIDI en DSP" },
+      { "name": "sig~", "description": "Conversión de número flotante de control a señal de audio continua" },
+      { "name": "snapshot~", "description": "Muestreo puntual de una señal de audio a valor de control" },
+      { "name": "buffer~", "description": "Almacenamiento de audio en memoria compartida (RAM)" }
+    ],
+    "midi_and_mpe": [
+      { "name": "notein", "description": "Receptor de notas MIDI (pitch, velocity, canal)" },
+      { "name": "noteout", "description": "Emisor de notas MIDI (pitch, velocity, canal)" },
+      { "name": "midiformat", "description": "Empaquetador de mensajes de canal, pitch bend y CC a formato MIDI crudo" },
+      { "name": "midiparse", "description": "Desempaquetador de flujo MIDI en mensajes estructurados" },
+      { "name": "makenote", "description": "Generador de pares note-on / note-off con duración programada" },
+      { "name": "xbendout", "description": "Emisor de pitch bend de 14 bits de alta resolución" }
+    ],
+    "osc_and_networking": [
+      { "name": "udpreceive", "description": "Receptor de paquetes de red UDP (base para OSC)" },
+      { "name": "udpsend", "description": "Emisor de paquetes de red UDP (base para OSC)" },
+      { "name": "OpenSoundControl", "description": "Codificador y decodificador de paquetes y bundles OSC estándar" },
+      { "name": "node.script", "description": "Ejecución de procesos Node.js completos dentro de Max con IPC bidireccional" }
+    ],
+    "data_structures": [
+      { "name": "dict", "description": "Diccionario jerárquico JSON de Max compartido entre objetos" },
+      { "name": "coll", "description": "Colección indexada de listas y asociaciones clave-valor" },
+      { "name": "table", "description": "Arreglo unidimensional de números enteros para lookups rápidos" }
+    ],
+    "ui_and_control": [
+      { "name": "kslider", "description": "Arquetipo canónico de teclado de piano para entrada/salida de notas MIDI" },
+      { "name": "nodes", "description": "Control bidimensional de interpolación de pesos y nodos" },
+      { "name": "multislider", "description": "Arreglo gráfico de sliders para envolventes y espectros" }
+    ]
+  }
+}
