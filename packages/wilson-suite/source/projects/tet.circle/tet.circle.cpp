@@ -1,4 +1,5 @@
 #include "c74_min.h"
+#include "harmos_tet_math.hpp"
 #include <vector>
 #include <cmath>
 #include <unordered_set>
@@ -69,42 +70,29 @@ public:
         }
     };
 
-    // Mensaje bang para calcular y emitir
+    // Mensaje bang para calcular y emitir consumiendo harmos::math
     message<threadcheck::none> bang { this, "bang", "Calcula y emite los pares y puntos fijos",
         MIN_FUNCTION {
             int divs = divisions;
             int sum = index_sum;
 
-            std::vector<std::pair<int, int>> pairs;
-            std::vector<int> fixed_points;
-            std::unordered_set<int> visited;
+            auto calculated_pairs = harmos::math::get_inversion_pairs(divs, sum);
 
-            for (int i = 0; i < divs; i++) {
-                if (visited.count(i)) continue;
-                int partner = mod_euclid(sum - i, divs);
-                if (partner == i) {
-                    fixed_points.push_back(i);
-                    visited.insert(i);
-                } else if (!visited.count(partner)) {
-                    pairs.push_back({i, partner});
-                    visited.insert(i);
-                    visited.insert(partner);
+            atoms flat_pairs;
+            atoms fixed_atoms;
+            int pair_count = 0;
+
+            for (const auto& p : calculated_pairs) {
+                if (p.is_fixed_point) {
+                    fixed_atoms.push_back(p.note_a);
+                } else {
+                    flat_pairs.push_back(p.note_a);
+                    flat_pairs.push_back(p.note_b);
+                    pair_count++;
                 }
             }
 
-            // Emitir por outlets
-            atoms flat_pairs;
-            for (const auto& p : pairs) {
-                flat_pairs.push_back(p.first);
-                flat_pairs.push_back(p.second);
-            }
-
-            atoms fixed_atoms;
-            for (int f : fixed_points) {
-                fixed_atoms.push_back(f);
-            }
-
-            count_outlet.send(static_cast<int>(pairs.size()));
+            count_outlet.send(pair_count);
             fixed_outlet.send(fixed_atoms);
             pairs_outlet.send(flat_pairs);
 

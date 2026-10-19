@@ -110,6 +110,25 @@ public:
         }
     };
 
+    // Mensaje de lista plana (recibe directamente la emisión de wilson.core por inlet 0)
+    message<threadcheck::none> list_msg { this, "list", "Recibe lista de ratios armónicos para activar el seam con generadores de afinación",
+        MIN_FUNCTION {
+            if (inlet == 0) {
+                custom_scale_ratios.clear();
+                for (const auto& item : args) {
+                    if (item.type() == message_type::float_argument || item.type() == message_type::int_argument) {
+                        double r = static_cast<double>(item);
+                        if (r > 0.0) custom_scale_ratios.push_back(r);
+                    }
+                }
+                if (!custom_scale_ratios.empty()) {
+                    temperament_mode = c74::min::symbol("custom_ratios");
+                }
+            }
+            return {};
+        }
+    };
+
     // Mensaje para limpiar estado visual
     message<> clear { this, "clear", "Apaga todas las celdas iluminadas",
         MIN_FUNCTION {

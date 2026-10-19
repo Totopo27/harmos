@@ -3,6 +3,41 @@
   "title": "MaxObjectContractRules",
   "description": "Especificación estricta de contratos de entradas y salidas de Max MSP para generación dinámica sin hardcoding.",
   "objects": {
+    "cycle~": {
+      "inlets": {
+        "0": { "name": "frequency_hz_or_phase", "type": "signal" },
+        "1": { "name": "phase_offset", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "gain~": {
+      "inlets": {
+        "0": { "name": "audio_in", "type": "signal" },
+        "1": { "name": "gain_control", "type": "int" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "ezdac~": {
+      "inlets": {
+        "0": { "name": "audio_left", "type": "signal" },
+        "1": { "name": "audio_right", "type": "signal" }
+      },
+      "outlets": []
+    },
+    "notein": {
+      "inlets": {
+        "0": { "name": "midi_port_or_poll", "type": "int" }
+      },
+      "outlets": {
+        "0": { "name": "pitch", "type": "int" },
+        "1": { "name": "velocity", "type": "int" },
+        "2": { "name": "channel", "type": "int" }
+      }
+    },
     "midiformat": {
       "inlets": {
         "0": { "name": "pitch", "type": "int", "range": [0, 127] },

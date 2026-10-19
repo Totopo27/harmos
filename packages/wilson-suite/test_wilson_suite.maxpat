@@ -263,6 +263,13 @@
 		"lines" : [ 			{
 				"patchline" : 				{
 					"destination" : [ "obj-hex", 0 ],
+					"source" : [ "obj-1", 0 ]
+				}
+
+			}
+, 			{
+				"patchline" : 				{
+					"destination" : [ "obj-hex", 0 ],
 					"source" : [ "obj-msg-normal", 0 ]
 				}
 
