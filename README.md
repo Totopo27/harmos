@@ -3,8 +3,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Max MSP](https://img.shields.io/badge/Cycling_'74-Max_8_%2F_9-purple.svg)](https://cycling74.com/)
 [![Target](https://img.shields.io/badge/Target-Max_SDK_%2F_Min--Devkit-orange.svg)](https://github.com/Cycling74/min-devkit)
-[![Architecture](https://img.shields.io/badge/Contracts-Zero_Hardcoding-success.svg)](./core/schema/max_contracts.json)
-[![Feedback Loop](https://img.shields.io/badge/Live_Audit-0_Console_Errors-brightgreen.svg)](./meta-skills/max-live-verifier/SKILL.md)
+
 
 Meta-traductor y generador de ecosistemas para Cycling '74 Max MSP y Max for Live.
 
