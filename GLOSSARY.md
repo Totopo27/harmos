@@ -18,6 +18,9 @@ El módulo profundo del compilador que encapsula la construcción de parches `.m
 ### Representación Intermedia (IR — Intermediate Representation)
 Esquema formal (`core/schema/max_object_ir.schema.json`) agnóstico del lenguaje que describe la topología, entradas, salidas, atributos y algoritmo de un objeto antes de que Harmos emita código C++ Min-Devkit o scripts.
 
+### Extractor de AST (AST Extractor)
+El componente del compilador (`core/compiler/ast_extractor.py`) que analiza estáticamente código fuente externo (iniciando por TypeScript) para inferir funciones, clases, tipos de parámetros y valores de retorno, sintetizando automáticamente una Representación Intermedia (`.ir.json`) válida sin intervención manual.
+
 ### Meta-Skills del Pipeline
 Habilidades operativas especializadas que gobiernan el ciclo de vida de la traducción:
 - **`max-transpiler-scout`**: Inspecciona el código externo, audita algoritmos y emite la IR inicial consultando el catálogo canónico.
