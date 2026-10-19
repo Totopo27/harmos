@@ -40,6 +40,42 @@ class TestContractEngine(unittest.TestCase):
         self.assertTrue(can_connect)
         self.assertIn("signal", reason)
 
+    def test_expanded_control_contracts(self):
+        # scale: 0: input, 1: in_low, 2: in_high, 3: out_low, 4: out_high
+        scale_inlets = self.engine.get_inlets("scale")
+        self.assertEqual(len(scale_inlets), 5)
+        self.assertEqual(self.engine.resolve_inlet_index("scale", "in_low"), 1)
+        self.assertEqual(self.engine.resolve_inlet_index("scale", "out_high"), 4)
+
+        # mtof: 0: midi_pitch -> outlet: freq_hz
+        mtof_inlets = self.engine.get_inlets("mtof")
+        self.assertEqual(len(mtof_inlets), 1)
+        mtof_outlets = self.engine.get_outlets("mtof")
+        self.assertEqual(mtof_outlets[0]["type"], "float")
+
+        # unpack: inlets y outlets de tipos
+        unpack_inlets = self.engine.get_inlets("unpack")
+        self.assertEqual(unpack_inlets[0]["type"], "list")
+
+    def test_expanded_dsp_contracts(self):
+        # lores~: 0: audio_in, 1: cutoff_freq, 2: resonance
+        lores_inlets = self.engine.get_inlets("lores~")
+        self.assertEqual(len(lores_inlets), 3)
+        self.assertEqual(self.engine.resolve_inlet_index("lores~", "cutoff"), 1)
+        self.assertEqual(self.engine.resolve_inlet_index("lores~", "resonance"), 2)
+
+        # clip~: 0: audio_in, 1: min, 2: max
+        clip_inlets = self.engine.get_inlets("clip~")
+        self.assertEqual(len(clip_inlets), 3)
+        self.assertEqual(self.engine.resolve_inlet_index("clip~", "min"), 1)
+
+        # plugin~ and plugout~
+        plugin_outlets = self.engine.get_outlets("plugin~")
+        self.assertEqual(len(plugin_outlets), 2)
+        plugout_inlets = self.engine.get_inlets("plugout~")
+        self.assertEqual(len(plugout_inlets), 2)
+
+
 
 class TestTypedPatch(unittest.TestCase):
     def test_create_valid_maxpat_structure(self):

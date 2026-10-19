@@ -74,6 +74,115 @@
         "2": { "name": "cents_deviation", "type": "float" }
       }
     },
+    "scale": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "float" },
+        "1": { "name": "in_low", "type": "float" },
+        "2": { "name": "in_high", "type": "float" },
+        "3": { "name": "out_low", "type": "float" },
+        "4": { "name": "out_high", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "scaled_output", "type": "float" }
+      }
+    },
+    "mtof": {
+      "inlets": {
+        "0": { "name": "midi_pitch", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "frequency_hz", "type": "float" }
+      }
+    },
+    "ftom": {
+      "inlets": {
+        "0": { "name": "frequency_hz", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "midi_pitch", "type": "float" }
+      }
+    },
+    "clip": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "float" },
+        "1": { "name": "min_value", "type": "float" },
+        "2": { "name": "max_value", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "clipped_output", "type": "float" }
+      }
+    },
+    "split": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "float" },
+        "1": { "name": "low_bound", "type": "float" },
+        "2": { "name": "high_bound", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "inside_range", "type": "float" },
+        "1": { "name": "outside_range", "type": "float" }
+      }
+    },
+    "route": {
+      "inlets": {
+        "0": { "name": "input_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "matched_args", "type": "anything" },
+        "1": { "name": "unmatched_pass", "type": "anything" }
+      }
+    },
+    "unpack": {
+      "inlets": {
+        "0": { "name": "input_list", "type": "list" }
+      },
+      "outlets": {
+        "0": { "name": "element_0", "type": "anything" }
+      }
+    },
+    "clip~": {
+      "inlets": {
+        "0": { "name": "audio_in", "type": "signal" },
+        "1": { "name": "min_bound", "type": "float" },
+        "2": { "name": "max_bound", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "lores~": {
+      "inlets": {
+        "0": { "name": "audio_in", "type": "signal" },
+        "1": { "name": "cutoff_freq_hz", "type": "float" },
+        "2": { "name": "resonance_factor", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "*~": {
+      "inlets": {
+        "0": { "name": "audio_in_a", "type": "signal" },
+        "1": { "name": "audio_in_b_or_gain", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "multiplied_audio", "type": "signal" }
+      }
+    },
+    "plugin~": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "audio_left", "type": "signal" },
+        "1": { "name": "audio_right", "type": "signal" }
+      }
+    },
+    "plugout~": {
+      "inlets": {
+        "0": { "name": "audio_left", "type": "signal" },
+        "1": { "name": "audio_right", "type": "signal" }
+      },
+      "outlets": []
+    },
     "tet.inversion": {
       "inlets": {
         "0": { "name": "index_sum", "type": "int", "range": [0, 71] },
