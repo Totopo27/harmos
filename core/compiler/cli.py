@@ -10,6 +10,20 @@ from pathlib import Path
 from typing import Dict, Any
 
 from core.compiler.typed_patch import TypedPatch
+from core.compiler.ast_extractor import extract_ir_from_file
+
+
+def handle_extract(source_file: str, output_path: str, object_name: str = None) -> Dict[str, Any]:
+    """Extrae la IR desde código fuente y la persiste como JSON."""
+    ir_data = extract_ir_from_file(source_file, object_name=object_name)
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(ir_data, f, indent=4)
+    return {
+        "success": True,
+        "object_name": ir_data["object_name"],
+        "ir_path": output_path
+    }
 
 
 def generate_cpp_min_devkit(ir: Dict[str, Any], output_path: str) -> None:
@@ -150,20 +164,41 @@ def compile_ir(ir_file_path: str, output_dir: str) -> Dict[str, Any]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Harmos CLI: Compilador de especificaciones IR hacia Max MSP.")
-    parser.add_argument("ir_file", help="Ruta al archivo de especificación IR (.ir.json)")
-    parser.add_argument("--out", default="./build_harmos", help="Directorio destino de generación")
+    parser = argparse.ArgumentParser(description="Harmos CLI: Compilador y extractor de especificaciones IR hacia Max MSP.")
+    subparsers = parser.add_subparsers(dest="command", help="Comando a ejecutar")
+
+    # Subcomando compile (por defecto o explícito)
+    compile_parser = subparsers.add_parser("compile", help="Compilar un archivo IR (.ir.json) a C++ y .maxpat")
+    compile_parser.add_argument("ir_file", help="Ruta al archivo de especificación IR (.ir.json)")
+    compile_parser.add_argument("--out", default="./build_harmos", help="Directorio destino de generación")
+
+    # Subcomando extract
+    extract_parser = subparsers.add_parser("extract", help="Extraer una especificación IR desde código fuente (TypeScript/JS)")
+    extract_parser.add_argument("source_file", help="Ruta al archivo fuente (.ts / .js)")
+    extract_parser.add_argument("--out", required=True, help="Ruta del archivo IR destino (.ir.json)")
+    extract_parser.add_argument("--name", default=None, help="Nombre del objeto en Max (ej. harmos.gain_meter)")
+
+    # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
+    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "-h", "--help"]:
+        sys.argv.insert(1, "compile")
 
     args = parser.parse_args()
 
     try:
-        res = compile_ir(args.ir_file, args.out)
-        print(f"Compilacion exitosa para: {res['object_name']}")
-        print(f"  Patcher de prueba: {res['maxpat_path']}")
-        print(f"  Fuente C++:        {res['cpp_path']}")
-        print(f"  CMakeLists:        {res['cmake_path']}")
+        if args.command == "compile":
+            res = compile_ir(args.ir_file, args.out)
+            print(f"Compilacion exitosa para: {res['object_name']}")
+            print(f"  Patcher de prueba: {res['maxpat_path']}")
+            print(f"  Fuente C++:        {res['cpp_path']}")
+            print(f"  CMakeLists:        {res['cmake_path']}")
+        elif args.command == "extract":
+            res = handle_extract(args.source_file, args.out, object_name=args.name)
+            print(f"Extraccion exitosa para: {res['object_name']}")
+            print(f"  Archivo IR generado: {res['ir_path']}")
+        else:
+            parser.print_help()
     except Exception as e:
-        print(f"Error durante la compilacion: {e}", file=sys.stderr)
+        print(f"Error durante la ejecucion: {e}", file=sys.stderr)
         sys.exit(1)
 
 

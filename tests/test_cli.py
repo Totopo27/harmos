@@ -72,6 +72,43 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertIn("inlet<>", cpp_content)
         self.assertIn("outlet<>", cpp_content)
 
+    def test_cli_extract_subcommand_end_to_end(self):
+        # Fixture TypeScript
+        ts_code = """
+        export class GainMeter {
+            peak: number = 0.0;
+            process(audioIn: number): number {
+                return audioIn;
+            }
+        }
+        """
+        ts_path = os.path.join(self.temp_dir, "GainMeter.ts")
+        with open(ts_path, "w", encoding="utf-8") as f:
+            f.write(ts_code)
+
+        ir_out_path = os.path.join(self.temp_dir, "gain_meter.ir.json")
+
+        # Importar la función que gobernará el comando extract
+        from core.compiler.cli import handle_extract
+
+        res = handle_extract(ts_path, ir_out_path, object_name="harmos.gain_meter")
+        self.assertTrue(res["success"])
+        self.assertTrue(os.path.exists(ir_out_path))
+
+        with open(ir_out_path, "r", encoding="utf-8") as f:
+            ir_data = json.load(f)
+
+        self.assertEqual(ir_data["object_name"], "harmos.gain_meter")
+        self.assertEqual(len(ir_data["inlets"]), 1)
+        self.assertEqual(len(ir_data["outlets"]), 1)
+
+        # Encadenamiento directo: compilar la IR recién extraída
+        compile_res = compile_ir(ir_out_path, output_dir=self.temp_dir)
+        self.assertTrue(compile_res["success"])
+        self.assertTrue(os.path.exists(compile_res["maxpat_path"]))
+        self.assertTrue(os.path.exists(compile_res["cpp_path"]))
+
+
 
 if __name__ == "__main__":
     unittest.main()
