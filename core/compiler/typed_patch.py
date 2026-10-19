@@ -78,6 +78,39 @@ class TypedPatch:
         }
         self.lines.append(line)
 
+    def connect_auto_adapt(self, src: MaxBox, src_outlet: int, dest: MaxBox, dest_inlet: int) -> Optional[MaxBox]:
+        """
+        Inserta de forma transparente una caja adaptadora si hay discrepancia de tipos
+        compatible (ej. salida 'list' conectada a entrada escalar 'float' o 'int').
+        """
+        src_base = src.text.strip().split()[0]
+        dest_base = dest.text.strip().split()[0]
+
+        src_outlets = self.engine.get_outlets(src_base)
+        dest_inlets = self.engine.get_inlets(dest_base)
+
+        src_type = src_outlets[src_outlet].get("type", "anything") if src_outlet < len(src_outlets) else "anything"
+        dest_type = dest_inlets[dest_inlet].get("type", "anything") if dest_inlet < len(dest_inlets) else "anything"
+
+        # Caso: Emisor lista hacia receptor escalar
+        if src_type == "list" and dest_type in ["float", "int", "number"]:
+            # Posición intermedia entre src y dest
+            adapter_x = (src.x + dest.x) / 2.0
+            adapter_y = (src.y + dest.y) / 2.0 if dest.y > src.y else src.y + 35.0
+
+            # Tipo de unpack según destino
+            unpack_type = "f" if dest_type == "float" else "i"
+            adapter_box = self.add_box(f"unpack {unpack_type} {unpack_type}", x=adapter_x, y=adapter_y)
+
+            # Trazar cables: src -> unpack (inlet 0) y unpack (outlet 0) -> dest (inlet solicitado)
+            self.connect(src, src_outlet, adapter_box, 0)
+            self.connect(adapter_box, 0, dest, dest_inlet)
+            return adapter_box
+
+        # Si son directamente compatibles, conectar directo
+        self.connect(src, src_outlet, dest, dest_inlet)
+        return None
+
     def connect_semantic(self, src: MaxBox, src_outlet: int, dest: MaxBox, semantic_role: str) -> None:
         """
         Resuelve dinámicamente el inlet físico mediante el contrato y conecta.

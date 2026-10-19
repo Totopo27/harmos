@@ -128,6 +128,33 @@ class TestTypedPatch(unittest.TestCase):
         with self.assertRaises(IncompatibleConnectionError):
             patch.connect(osc, 0, note, 0)
 
+    def test_auto_insertion_of_unpack_adapter(self):
+        patch = TypedPatch()
+        # tet.inversion emite una lista [i, partner] en outlet 0
+        inversion = patch.add_box("tet.inversion")
+        # scale espera un float escalar en inlet 0
+        scale = patch.add_box("scale 0 127 20 20000")
+
+        # Conectar list a float escalar debe disparar auto-adaptador unpack
+        adapter_box = patch.connect_auto_adapt(inversion, 0, scale, 0)
+
+        self.assertIsNotNone(adapter_box)
+        self.assertEqual(adapter_box.maxclass, "newobj")
+        self.assertTrue(adapter_box.text.startswith("unpack"))
+
+        # El parche debe contener ahora 3 cajas: origen, unpack, destino
+        data = patch.to_dict()
+        boxes = data["patcher"]["boxes"]
+        lines = data["patcher"]["lines"]
+
+        self.assertEqual(len(boxes), 3)
+        # Debe haber 2 líneas de conexión: origen -> unpack (inlet 0) y unpack (outlet 0) -> destino (inlet 0)
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0]["patchline"]["destination"][0], adapter_box.box_id)
+        self.assertEqual(lines[1]["patchline"]["source"][0], adapter_box.box_id)
+        self.assertEqual(lines[1]["patchline"]["destination"][0], scale.box_id)
+
+
 
 if __name__ == "__main__":
     unittest.main()
