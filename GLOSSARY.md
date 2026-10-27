@@ -19,7 +19,16 @@ El módulo profundo del compilador que encapsula la construcción de parches `.m
 Esquema formal (`core/schema/max_object_ir.schema.json`) agnóstico del lenguaje que describe la topología, entradas, salidas, atributos y algoritmo de un objeto antes de que Harmos emita código C++ Min-Devkit o scripts.
 
 ### Extractor de AST (AST Extractor)
-El componente del compilador (`core/compiler/ast_extractor.py`) que analiza estáticamente código fuente externo (iniciando por TypeScript) para inferir funciones, clases, tipos de parámetros y valores de retorno, sintetizando automáticamente una Representación Intermedia (`.ir.json`) válida sin intervención manual.
+El componente del compilador (`core/compiler/ast_extractor.py`) que analiza estáticamente código fuente externo para inferir funciones, clases, grafos de síntesis (SynthDefs / UGens), tipos de señales y parámetros, sintetizando automáticamente una Representación Intermedia (`.ir.json`) válida sin intervención manual.
+
+### Grafo de Síntesis de Audio (Audio Synthesis Graph)
+Estructura formal que representa la topología de un motor sonoro (osciladores, moduladores, generadores de envolvente, filtros y ruteo a buses). Mapea la tasa de cómputo del lenguaje fuente (ej. `.ar` para audio a frecuencia de muestreo y `.kr` para modulación de control) a la infraestructura equivalente de Max/MSP (`~` signals para audio, mensajes o eventos de control para envolventes/parámetros).
+
+### Subpatcher de Voz Polifónica (`poly~` Voice Subpatcher)
+Estructura canónica de encapsulación en Max MSP que aloja la instancia unitaria de una voz de síntesis. Define formalmente los puntos de acople mediante objetos `in~`/`in` para señales y mensajes de entrada, `out~`/`out` para bus estéreo/mono de salida, y `thispoly~` para control dinámico de asignación, muting y robo de voces sin fugas de CPU ni cuelgues de notas.
+
+### Grafo de Estado y Control (Control & Table State Graph)
+Estructura formal que modela las tablas de datos (afinaciones, buffers, colecciones de armónicos, tablas de consulta) y los mecanismos de selección y conmutación de estado (selectores de escala, enrutadores de presets, parámetros globales). Enlaza de forma declarativa e inmutable las fuentes de datos (`coll`, `buffer~`, `dict`) con los controles de interfaz (`umenu`, `radiogroup`) y los algoritmos matemáticos en tiempo real (`js`, `expr`, `gen~`).
 
 ### Meta-Skills del Pipeline
 Habilidades operativas especializadas que gobiernan el ciclo de vida de la traducción:

@@ -169,6 +169,126 @@
         "0": { "name": "multiplied_audio", "type": "signal" }
       }
     },
+    "+~": {
+      "inlets": {
+        "0": { "name": "audio_in_a", "type": "signal" },
+        "1": { "name": "audio_in_b_or_offset", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "summed_audio", "type": "signal" }
+      }
+    },
+    "-~": {
+      "inlets": {
+        "0": { "name": "audio_in_a", "type": "signal" },
+        "1": { "name": "audio_in_b", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "subtracted_audio", "type": "signal" }
+      }
+    },
+    "phasor~": {
+      "inlets": {
+        "0": { "name": "frequency_hz", "type": "signal" },
+        "1": { "name": "phase_reset", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "phase_ramp", "type": "signal" }
+      }
+    },
+    "saw~": {
+      "inlets": {
+        "0": { "name": "frequency_hz", "type": "signal" },
+        "1": { "name": "phase_offset", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "rect~": {
+      "inlets": {
+        "0": { "name": "frequency_hz", "type": "signal" },
+        "1": { "name": "duty_cycle", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "adsr~": {
+      "inlets": {
+        "0": { "name": "gate_trigger", "type": "signal" },
+        "1": { "name": "attack_time_ms", "type": "float" },
+        "2": { "name": "decay_time_ms", "type": "float" },
+        "3": { "name": "sustain_gain", "type": "float" },
+        "4": { "name": "release_time_ms", "type": "float" }
+      },
+      "outlets": {
+        "0": { "name": "envelope_signal", "type": "signal" },
+        "1": { "name": "envelope_completed_bang", "type": "bang" }
+      }
+    },
+    "line~": {
+      "inlets": {
+        "0": { "name": "target_and_time_list", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "ramp_signal", "type": "signal" },
+        "1": { "name": "ramp_completed_bang", "type": "bang" }
+      }
+    },
+    "curve~": {
+      "inlets": {
+        "0": { "name": "target_time_curve_list", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "ramp_signal", "type": "signal" },
+        "1": { "name": "ramp_completed_bang", "type": "bang" }
+      }
+    },
+    "omx.peaklim~": {
+      "inlets": {
+        "0": { "name": "audio_left", "type": "signal" },
+        "1": { "name": "audio_right", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "limited_left", "type": "signal" },
+        "1": { "name": "limited_right", "type": "signal" }
+      }
+    },
+    "in~": {
+      "inlets": {
+        "0": { "name": "signal_input", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "signal_output", "type": "signal" }
+      }
+    },
+    "out~": {
+      "inlets": {
+        "0": { "name": "signal_input", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "signal_output", "type": "signal" }
+      }
+    },
+    "thispoly~": {
+      "inlets": {
+        "0": { "name": "mute_or_voice_messages", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "voice_index", "type": "int" }
+      }
+    },
+    "poly~": {
+      "inlets": {
+        "0": { "name": "target_voice_or_messages", "type": "anything" },
+        "1": { "name": "audio_or_signal_in", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out_1", "type": "signal" },
+        "1": { "name": "audio_out_2", "type": "signal" }
+      }
+    },
     "plugin~": {
       "inlets": [],
       "outlets": {
@@ -182,6 +302,140 @@
         "1": { "name": "audio_right", "type": "signal" }
       },
       "outlets": []
+    },
+    "in": {
+      "inlets": {
+        "0": { "name": "control_input", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "control_output", "type": "anything" }
+      }
+    },
+    "out": {
+      "inlets": {
+        "0": { "name": "control_input", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "control_output", "type": "anything" }
+      }
+    },
+    "sig~": {
+      "inlets": {
+        "0": { "name": "number_or_signal", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "signal_out", "type": "signal" }
+      }
+    },
+    "tri~": {
+      "inlets": {
+        "0": { "name": "frequency_hz", "type": "signal" },
+        "1": { "name": "duty_cycle", "type": "signal" }
+      },
+      "outlets": {
+        "0": { "name": "audio_out", "type": "signal" }
+      }
+    },
+    "coll": {
+      "inlets": {
+        "0": { "name": "address_or_message", "type": "anything" },
+        "1": { "name": "store_data", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "entry_data", "type": "anything" },
+        "1": { "name": "index_or_key", "type": "anything" },
+        "2": { "name": "dump_out", "type": "anything" }
+      }
+    },
+    "buffer~": {
+      "inlets": {
+        "0": { "name": "buffer_messages", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "buffer_completed_bang", "type": "bang" }
+      }
+    },
+    "js": {
+      "inlets": {
+        "0": { "name": "js_inlet_0", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "js_outlet_0", "type": "anything" }
+      }
+    },
+    "midiparse": {
+      "inlets": {
+        "0": { "name": "raw_midi_in", "type": "int" }
+      },
+      "outlets": {
+        "0": { "name": "note_pitch_vel_list", "type": "list" },
+        "1": { "name": "poly_aftertouch", "type": "list" },
+        "2": { "name": "control_change", "type": "list" },
+        "3": { "name": "program_change", "type": "int" },
+        "4": { "name": "aftertouch", "type": "int" },
+        "5": { "name": "pitchbend", "type": "int" },
+        "6": { "name": "midi_channel", "type": "int" }
+      }
+    },
+    "pack": {
+      "inlets": {
+        "0": { "name": "item_0", "type": "anything" },
+        "1": { "name": "item_1", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "packed_list", "type": "list" }
+      }
+    },
+    "prepend": {
+      "inlets": {
+        "0": { "name": "input_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "prepended_message", "type": "anything" }
+      }
+    },
+    "trigger": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "outlet_right", "type": "anything" },
+        "1": { "name": "outlet_left", "type": "anything" }
+      }
+    },
+    "t": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "outlet_right", "type": "anything" },
+        "1": { "name": "outlet_left", "type": "anything" }
+      }
+    },
+    "loadmess": {
+      "inlets": {
+        "0": { "name": "bang_or_input", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "startup_message", "type": "anything" }
+      }
+    },
+    "umenu": {
+      "inlets": {
+        "0": { "name": "menu_choice_or_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "item_index", "type": "int" },
+        "1": { "name": "item_text", "type": "anything" }
+      }
+    },
+    "message": {
+      "inlets": {
+        "0": { "name": "trigger_or_set_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "message_out", "type": "anything" }
+      }
     },
     "tet.inversion": {
       "inlets": {

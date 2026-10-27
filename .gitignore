@@ -11,6 +11,7 @@ c74support/min-devkit/
 
 # Build artifacts
 build/
+build_harmos/
 *.obj
 *.exe
 *.recipe

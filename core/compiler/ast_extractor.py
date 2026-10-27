@@ -159,6 +159,9 @@ def extract_ir_from_ts_source(source_code: str, object_name: str = "harmos_objec
     }
 
 
+from core.compiler.sc_ast_extractor import extract_ir_from_sc_source
+
+
 def extract_ir_from_file(source_path: str, object_name: Optional[str] = None) -> Dict[str, Any]:
     path = Path(source_path)
     if not path.exists():
@@ -167,5 +170,10 @@ def extract_ir_from_file(source_path: str, object_name: Optional[str] = None) ->
     obj_name = object_name or f"harmos.{path.stem}"
     with open(path, "r", encoding="utf-8") as f:
         code = f.read()
+
+    # Despacho políglota según extensión
+    ext = path.suffix.lower()
+    if ext in [".sc", ".scd"]:
+        return extract_ir_from_sc_source(code, default_name=obj_name)
 
     return extract_ir_from_ts_source(code, object_name=obj_name)

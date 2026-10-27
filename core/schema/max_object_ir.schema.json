@@ -73,6 +73,52 @@
           "description": { "type": "string" }
         }
       }
+    },
+    "data_tables": {
+      "type": "array",
+      "description": "Tablas de consulta de datos (afinaciones, constantes, buffers, colls)",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["coll", "buffer", "dict"] },
+          "source_file": { "type": "string" },
+          "total_entries": { "type": "integer" },
+          "default_entry": { "type": "string" }
+        }
+      }
+    },
+    "control_interfaces": {
+      "type": "array",
+      "description": "Controles de usuario y conmutadores de estado vinculados al grafo de control",
+      "items": {
+        "type": "object",
+        "required": ["name", "ui_type", "target_table"],
+        "properties": {
+          "name": { "type": "string" },
+          "ui_type": { "type": "string", "enum": ["umenu", "radiogroup", "tab"] },
+          "target_table": { "type": "string" },
+          "options": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "math_kernels": {
+      "type": "array",
+      "description": "Kernels matemáticos auxiliares en tiempo real (ej. scripts JS o gen~)",
+      "items": {
+        "type": "object",
+        "required": ["name", "runtime", "source_file"],
+        "properties": {
+          "name": { "type": "string" },
+          "runtime": { "type": "string", "enum": ["js", "gen", "c_external"] },
+          "source_file": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
     }
   }
 }
