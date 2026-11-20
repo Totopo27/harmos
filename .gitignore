@@ -19,6 +19,7 @@ build_harmos/
 
 # Local test / automation scripts
 *.ps1
+cases_*.jsonl
 
 # Python artifacts
 __pycache__/

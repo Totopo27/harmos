@@ -1,0 +1,44 @@
+name: Harmos CI
+
+on:
+  push:
+    branches: [ main, "feat/**" ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  guardrail-and-tests:
+    name: Guardrail & Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+        python-version: [ "3.11" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up MSVC (Windows only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Run Harmos Guardrail (Tests + Schemas + Privacy)
+        run: python scripts/check.py
+
+      - name: Harvest Wilson test cases
+        run: |
+          python -m core.compiler.cli harvest --suite wilson --out cases_wilson.jsonl
+
+      - name: Run Headless C++ Semantic Differential Oracle
+        run: |
+          python -m core.compiler.cli diff cases_wilson.jsonl --cpp-kernel benchmarks/teclados-wilson/wilson_kernel.hpp --kernel-class wilson
