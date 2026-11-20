@@ -12,8 +12,8 @@ Cosecha de casos (cases.jsonl), diff con tolerancia escalar y runner headless.
 
 ## Tasks
 
-- [x] T1 (S2) [inline]: Implementar especificación y cosechador de casos `cases.jsonl` (`core/compiler/oracle_harvest.py`) y tests unitarios. Commit: pending
-- [ ] T2 (S3) [inline]: Implementar runner de `diff` semántico con tolerancia numérica (`core/compiler/oracle_diff.py`) y tests unitarios. Commit: pending
+- [x] T1 (S2) [inline]: Implementar especificación y cosechador de casos `cases.jsonl` (`core/compiler/oracle_harvest.py`) y tests unitarios. Commit: 76e817e
+- [x] T2 (S3) [inline]: Implementar runner de `diff` semántico con tolerancia numérica (`core/compiler/oracle_diff.py`) y tests unitarios. Commit: pending
 - [ ] T3 (S4) [inline]: Integrar comandos `harvest` y `diff` en la CLI de Harmos y actualizar compuertas. Commit: pending
 - [ ] T4 (S5) [inline]: Implementar arnés de prueba headless para kernels C++ desacoplados y validar contra benchmarks piloto. Commit: pending
 
