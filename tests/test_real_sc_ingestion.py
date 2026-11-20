@@ -9,17 +9,32 @@ from core.compiler.ast_extractor import extract_ir_from_file
 from core.compiler.sc_ast_extractor import SCAstExtractor
 
 
+SAMPLE_ENGINE_SCD = """
+(
+SynthDef(\\fmVoice, {
+    arg out = 0, freq = 440, amp = 0.5, gate = 1;
+    var lfo = LFTri.kr(5.0);
+    var env = EnvGen.kr(Env.adsr(0.01, 0.3, 0.5, 1.0), gate);
+    var osc1 = SinOsc.ar(freq + lfo);
+    var osc2 = SyncSaw.ar(freq * 2, freq);
+    var sig = Limiter.ar((osc1 + osc2) * env * amp);
+    Out.ar(out, sig ! 2);
+}).add;
+)
+"""
+
+
 class TestRealEngineSCIngestion(unittest.TestCase):
     def setUp(self):
         root = os.environ.get("SCMICROSYNTH_ROOT")
         self.engine_path = Path(root) / "modules" / "engine.scd" if root else None
 
     def test_ingest_real_sc_engine_file(self):
-        if not self.engine_path or not self.engine_path.exists():
-            self.skipTest("Defina SCMICROSYNTH_ROOT apuntando al proyecto SCMicroSynth.")
-
-        with open(self.engine_path, "r", encoding="utf-8") as f:
-            code = f.read()
+        if self.engine_path and self.engine_path.exists():
+            with open(self.engine_path, "r", encoding="utf-8") as f:
+                code = f.read()
+        else:
+            code = SAMPLE_ENGINE_SCD
 
         extractor = SCAstExtractor()
         ir = extractor.extract(code, default_name="engineModule")

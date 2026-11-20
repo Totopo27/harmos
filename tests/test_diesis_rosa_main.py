@@ -57,6 +57,35 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_compile_main_synth_with_dynamic_control_ir(self):
+        """Verifica que compile_main_synth configure default_table a partir de control_ir."""
+        control_ir = {
+            "category": "control",
+            "data_tables": [
+                {"name": "tet41", "type": "coll", "source_file": "tet41.txt"}
+            ],
+            "control_interfaces": [
+                {"name": "scale_selector", "ui_type": "umenu", "target_table": "tuning_coll", "options": ["tet41.txt"]}
+            ]
+        }
+        with tempfile.NamedTemporaryFile(suffix=".maxpat", delete=False) as f:
+            temp_path = f.name
+
+        try:
+            res = self.compiler.compile_main_synth(temp_path, voice_patcher_name="fmVoice", control_ir=control_ir)
+            self.assertTrue(res["success"])
+
+            with open(temp_path, "r", encoding="utf-8") as patch_f:
+                patch_data = json.load(patch_f)
+
+            boxes = patch_data["patcher"]["boxes"]
+            box_texts = [b["box"]["text"] for b in boxes]
+            self.assertTrue(any("coll tet41.txt" in t for t in box_texts), "Debe cargar coll tet41.txt según control_ir")
+        finally:
+            import os
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
 
 if __name__ == "__main__":
     unittest.main()
