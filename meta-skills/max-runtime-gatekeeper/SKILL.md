@@ -42,10 +42,12 @@ Cargar de forma obligatoria tras generar cualquier external compilado (`.mxe64`)
 
 ## Output Contract
 
-- Veredicto binario de aprobación (PASS / FAIL).
+- Veredicto binario de aprobación estructural (PASS / FAIL / BLOCKED).
 - Certificación de cero errores en la consola de Max y patcher funcional verificado.
+- Nota de alcance: Todo veredicto PASS certifica legalidad estructural y de contratos; no certifica equivalencia matemática con el fuente (ver `docs/ORACULO_LIMITES.md`).
 
 ## References
 
+- `docs/ORACULO_LIMITES.md` — Declaración formal de límites y honestidad epistémica del oráculo.
 - `core/schema/max_contracts.json` — Contratos de tipos de entradas y salidas.
 - `docs/PROTOCOLO_SEGURIDAD_Y_PUBLICACION_GIT.md` — Estándar de higiene y pre-commit.

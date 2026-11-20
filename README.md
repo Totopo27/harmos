@@ -37,7 +37,7 @@ No se trasladan bibliotecas enteras a una única caja negra. Se dividen las resp
 Si Max ya cuenta con primitivas probadas (`mtof`, `dict`, `coll`, `udpreceive`), Harmos no fabrica externals redundantes: construye abstracciones de conexión alrededor del estándar. Si existe un arquetipo interactivo consagrado (como `kslider`), toma su contrato como base para derivar variantes especializadas según los requerimientos del dominio origen.
 
 ### 4. Bucle cerrado de verificación en vivo (RDD)
-Ninguna compilación se valida en frío. El motor levanta instancias controladas de `Max.exe`, carga los patchers generados, captura las ventanas y audita los logs de la consola interna de Max. Si aparece una sola advertencia o desajuste de tipos, el pipeline entra en corrección automática antes de dar por cerrada la tarea.
+Ninguna compilación se valida en frío. El motor levanta instancias controladas de `Max.exe`, carga los patchers generados, captura las ventanas y audita los logs de la consola interna de Max. Si aparece una sola advertencia o desajuste de tipos, el pipeline entra en corrección automática antes de dar por cerrada la tarea. Todo veredicto delimita explícitamente su alcance técnico conforme a [`docs/ORACULO_LIMITES.md`](./docs/ORACULO_LIMITES.md).
 
 ---
 
