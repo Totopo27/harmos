@@ -40,16 +40,17 @@
     },
     "midiformat": {
       "inlets": {
-        "0": { "name": "pitch", "type": "int", "range": [0, 127] },
-        "1": { "name": "velocity", "type": "int", "range": [0, 127] },
-        "2": { "name": "poly_aftertouch", "type": "int", "range": [0, 127] },
-        "3": { "name": "control_change", "type": "list", "format": "[cc_num, value]" },
-        "4": { "name": "program_change", "type": "int", "range": [1, 128] },
+        "0": { "name": "pitch", "type": "int", "description": "Pitch number or [pitch, velocity] note-on list", "range": [0, 127] },
+        "1": { "name": "poly_aftertouch", "type": "list", "format": "[pitch, pressure]" },
+        "2": { "name": "control_change", "type": "list", "format": "[cc_num, value]" },
+        "3": { "name": "program_change", "type": "int", "range": [1, 128] },
+        "4": { "name": "aftertouch", "type": "int", "description": "Channel pressure", "range": [0, 127] },
         "5": { "name": "pitch_bend", "type": "int", "range": [0, 16383], "center": 8192 },
         "6": { "name": "channel", "type": "int", "range": [1, 16] }
       },
       "outlets": {
-        "0": { "name": "midi_raw_bytes", "type": "int" }
+        "0": { "name": "midi_raw_bytes", "type": "int" },
+        "1": { "name": "midievent_list", "type": "list" }
       }
     },
     "makenote": {

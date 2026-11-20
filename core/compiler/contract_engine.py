@@ -65,11 +65,19 @@ class ContractEngine:
         inlets = self.get_inlets(obj_name)
         role_lower = semantic_role.lower()
 
-        # 1. Búsqueda por coincidencia en nombre o descripción
+        # 1. Búsqueda exacta por nombre
         for idx, inl in enumerate(inlets):
-            name = inl.get("name", "").lower()
-            desc = inl.get("description", "").lower()
-            if role_lower == name or role_lower in name or role_lower in desc:
+            if role_lower == inl.get("name", "").lower():
+                return idx
+
+        # 2. Búsqueda por subcadena en nombre
+        for idx, inl in enumerate(inlets):
+            if role_lower in inl.get("name", "").lower():
+                return idx
+
+        # 3. Búsqueda por coincidencia en descripción
+        for idx, inl in enumerate(inlets):
+            if role_lower in inl.get("description", "").lower():
                 return idx
 
         # 2. Heurística canónica de fallback para objetos estándar de Max
