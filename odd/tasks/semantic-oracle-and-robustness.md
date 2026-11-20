@@ -17,7 +17,7 @@ Seguimiento ODD de tareas por commits unitarios atómicos.
 - [x] T2 (S3) [inline]: Implementar módulo de procedencia `emitted-from.json` y verificación en CLI. Commit: 06bcd03
 - [x] T3 (S4) [inline]: Redactar declaración formal de límites del oráculo y honestidad epistémica (I11). Commit: eeda01f
 - [x] T4 (S5) [inline]: Implementar veredictos explícitos en benchmarks (I6). Commit: 0eaa05b
-- [x] T5 (S6) [inline]: Refactorizar emisión C++ desacoplando Kernel Puro y Binding Min-Devkit. Commit: pending
+- [x] T5 (S6) [inline]: Refactorizar emisión C++ desacoplando Kernel Puro y Binding Min-Devkit. Commit: 70084a0
 
 ## Log
 
