@@ -109,6 +109,19 @@ class TestContractEngine(unittest.TestCase):
         self.assertEqual(core_outlets[0]["name"], "ratios")
         self.assertEqual(core_outlets[1]["name"], "frequencies")
 
+        # micro.fretboard
+        fret_inlets = self.engine.get_inlets("micro.fretboard")
+        self.assertEqual(len(fret_inlets), 2)
+        self.assertEqual(self.engine.resolve_inlet_index("micro.fretboard", "control"), 0)
+        self.assertEqual(self.engine.resolve_inlet_index("micro.fretboard", "velocity"), 1)
+
+        fret_outlets = self.engine.get_outlets("micro.fretboard")
+        self.assertEqual(len(fret_outlets), 4)
+        self.assertEqual(fret_outlets[0]["type"], "float")
+        self.assertEqual(fret_outlets[1]["type"], "int")
+        self.assertEqual(fret_outlets[2]["type"], "list")
+        self.assertEqual(fret_outlets[3]["type"], "list")
+
 
 
 class TestTypedPatch(unittest.TestCase):

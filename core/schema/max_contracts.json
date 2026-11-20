@@ -75,6 +75,18 @@
         "2": { "name": "cents_deviation", "type": "float" }
       }
     },
+    "micro.fretboard": {
+      "inlets": {
+        "0": { "name": "control", "type": "anything", "description": "Control messages, clear, tuning or fret configuration" },
+        "1": { "name": "velocity", "type": "int", "description": "Velocity override for triggered fretlet notes (0-127)" }
+      },
+      "outlets": {
+        "0": { "name": "frequency", "type": "float", "description": "Fundamental frequency in Hz of played fretlet" },
+        "1": { "name": "velocity", "type": "int", "description": "Velocity of played fretlet: >0 on press, 0 on release" },
+        "2": { "name": "note_data", "type": "list", "description": "Played note information [string, fret, frequency, velocity]" },
+        "3": { "name": "mpe_event", "type": "list", "description": "MPE structured note event per string channel" }
+      }
+    },
     "kslider": {
       "inlets": {
         "0": { "name": "pitch", "type": "int", "description": "Key/pitch number or [pitch, velocity] list" },
