@@ -356,16 +356,16 @@ def main():
 
     # Subcomando harvest
     harvest_parser = subparsers.add_parser("harvest", help="Cosechar vectores de prueba semanticos hacia cases.jsonl")
-    harvest_parser.add_argument("--suite", choices=["truax", "wilson"], default="truax", help="Suite estandar a cosechar")
+    harvest_parser.add_argument("--suite", choices=["truax", "wilson", "hexslider"], default="truax", help="Suite estandar a cosechar")
     harvest_parser.add_argument("--out", required=True, help="Ruta del archivo destino (cases.jsonl)")
     harvest_parser.add_argument("--tolerance", type=float, default=1e-7, help="Tolerancia numerica float")
 
     # Subcomando diff
     diff_parser = subparsers.add_parser("diff", help="Evaluar equivalencia semantica de cases.jsonl contra un target")
     diff_parser.add_argument("cases", help="Ruta al archivo cases.jsonl")
-    diff_parser.add_argument("--suite", choices=["truax", "wilson"], default="truax", help="Registro objetivo a evaluar")
+    diff_parser.add_argument("--suite", choices=["truax", "wilson", "hexslider"], default="truax", help="Registro objetivo a evaluar")
     diff_parser.add_argument("--cpp-kernel", help="Ruta al header de kernel C++ puro (*_kernel.hpp) para evaluacion headless en CI")
-    diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp"], default="wilson", help="Tipo de arnes C++ a generar")
+    diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp", "hexslider"], default="wilson", help="Tipo de arnes C++ a generar")
     diff_parser.add_argument("--kernel-type-name", help="Nombre exacto del tipo C++ (para control/dsp)")
 
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
@@ -426,6 +426,38 @@ def main():
                     return ratio
                 w_inputs = [[0.5], [1.0], [1.5], [2.0], [3.0], [5.0], [7.0]]
                 cases.extend(harvest_from_callable(wilson_reduce_to_octave, "reduce_to_octave", w_inputs, tolerance=args.tolerance))
+            elif args.suite == "hexslider":
+                def ref_hex_freq(col: int, row: int) -> float:
+                    base_freq = 261.625565
+                    edo = 31.0
+                    step_x = 1
+                    step_y = 5
+                    step_count = col * step_x + row * step_y
+                    return base_freq * (2.0 ** (step_count / edo))
+
+                def ref_hex_hit(x: float, y: float) -> int:
+                    r = 12.0
+                    cols = 39
+                    rows = 25
+                    sqrt3 = 1.732050807568877
+                    h_spacing = r * 1.5
+                    v_spacing = r * sqrt3
+                    idx = 0
+                    for row in range(rows):
+                        for col in range(cols):
+                            cx = col * h_spacing + r
+                            cy = row * v_spacing + (v_spacing * 0.5 if col % 2 == 1 else 0.0) + (r * sqrt3 * 0.5)
+                            dx = x - cx
+                            dy = y - cy
+                            if (dx * dx + dy * dy) <= (r * r * 0.85):
+                                return idx
+                            idx += 1
+                    return -1
+
+                freq_inputs = [[0, 0], [1, 0], [0, 1], [5, 2], [10, 4]]
+                cases.extend(harvest_from_callable(ref_hex_freq, "compute_cell_frequency", freq_inputs, tolerance=args.tolerance))
+                hit_inputs = [[12.0, 10.392], [0.0, 0.0], [30.0, 20.784], [500.0, 500.0]]
+                cases.extend(harvest_from_callable(ref_hex_hit, "hit_test", hit_inputs, tolerance=args.tolerance))
 
             count = write_cases_jsonl(cases, args.out)
             print(f"Cosecha exitosa: {count} casos guardados en '{args.out}'.")
@@ -456,6 +488,36 @@ def main():
                             ratio *= 2.0
                         return ratio
                     registry["reduce_to_octave"] = wilson_reduce_to_octave
+                elif args.suite == "hexslider":
+                    def ref_hex_freq(col: int, row: int) -> float:
+                        base_freq = 261.625565
+                        edo = 31.0
+                        step_x = 1
+                        step_y = 5
+                        step_count = col * step_x + row * step_y
+                        return base_freq * (2.0 ** (step_count / edo))
+
+                    def ref_hex_hit(x: float, y: float) -> int:
+                        r = 12.0
+                        cols = 39
+                        rows = 25
+                        sqrt3 = 1.732050807568877
+                        h_spacing = r * 1.5
+                        v_spacing = r * sqrt3
+                        idx = 0
+                        for row in range(rows):
+                            for col in range(cols):
+                                cx = col * h_spacing + r
+                                cy = row * v_spacing + (v_spacing * 0.5 if col % 2 == 1 else 0.0) + (r * sqrt3 * 0.5)
+                                dx = x - cx
+                                dy = y - cy
+                                if (dx * dx + dy * dy) <= (r * r * 0.85):
+                                    return idx
+                                idx += 1
+                        return -1
+
+                    registry["compute_cell_frequency"] = ref_hex_freq
+                    registry["hit_test"] = ref_hex_hit
 
                 report = evaluate_diff(cases, registry)
             print("\n" + "=" * 50)
