@@ -113,14 +113,16 @@ class TestBenchmarkEngine(unittest.TestCase):
 
         verdicts = []
         speedups = []
+        all_reasons = []
         for _ in range(5):
             v = benchmark_truax_normal_form()
             verdicts.append(v.verdict)
+            all_reasons.append(v.reasons)
             self.assertIsNotNone(v.speedup)
             speedups.append(v.speedup)
 
         # 1. Todos los veredictos deben ser exactamente iguales a SHIP
-        self.assertTrue(all(verdict == "SHIP" for verdict in verdicts), f"Veredictos inestables: {verdicts}")
+        self.assertTrue(all(verdict == "SHIP" for verdict in verdicts), f"Veredictos inestables: {verdicts}, detalles: {all_reasons}")
 
         # 2. La dispersion de speedup entre ejecuciones debe ser acotada (< 0.5x de rango)
         speedup_range = max(speedups) - min(speedups)

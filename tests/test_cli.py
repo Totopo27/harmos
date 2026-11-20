@@ -11,6 +11,13 @@ from pathlib import Path
 
 from core.compiler.cli import compile_ir
 
+try:
+    from core.compiler.cli import resolve_min_api_dir
+    resolve_min_api_dir()
+    _MIN_DEVKIT_AVAILABLE = True
+except Exception:
+    _MIN_DEVKIT_AVAILABLE = False
+
 
 class TestHarmosCLI(unittest.TestCase):
     def setUp(self):
@@ -108,6 +115,7 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertTrue(os.path.exists(compile_res["maxpat_path"]))
         self.assertTrue(os.path.exists(compile_res["cpp_path"]))
 
+    @unittest.skipUnless(_MIN_DEVKIT_AVAILABLE, "Min-DevKit no disponible en el host/CI")
     def test_compile_ir_with_build_emits_native_external(self):
         sample_ir = {
             "object_name": "harmos.gain_meter",
