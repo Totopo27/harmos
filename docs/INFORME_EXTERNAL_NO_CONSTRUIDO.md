@@ -136,24 +136,23 @@ pendiente.
 
 | Componente | Estado observado |
 | --- | --- |
-| `cmake` | Presente: `C:\Users\ttoto\mingw64\bin\cmake.exe` |
-| `ninja` | Presente: `C:\Users\ttoto\mingw64\bin\ninja.exe` |
+| `cmake` | Presente en `%USERPROFILE%\mingw64\bin\cmake.exe` |
+| `ninja` | Presente en `%USERPROFILE%\mingw64\bin\ninja.exe` |
 | Min-DevKit | Presente en `c74support/min-devkit` |
 | `MaxAPI.lib`, `MaxAudio.lib`, `jitlib.lib` | Presentes en `max-sdk-base` |
 | Binarios `.mxe64` previos | Presentes (`wilson.core.mxe64`, `micro.mpe.mxe64`, entre otros) |
-| **Compilador MSVC (`cl.exe`)** | **Ausente** |
+| **Compilador MSVC (`cl.exe`)** | **Ausente inicialmente; instalado después** |
 
-Evidencia del bloqueador:
+Evidencia del bloqueador inicial:
 
 - `vswhere -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64` no
-  devuelve ninguna instalación.
-- `C:\Program Files\Microsoft Visual Studio\18\Community\VC` contiene solo
-  `Auxiliary` y `Redist`; no existe el directorio `Tools\MSVC`.
-- Una búsqueda de `cl.exe` en las raíces de Visual Studio no devuelve resultados.
-- `c74support/min-devkit/build/CMakeCache.txt` registra como linker
-  `C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe`,
-  y ese directorio ya no existe: el toolchain que construyó los `.mxe64`
-  presentes fue desinstalado después.
+  devolvía ninguna instalación.
+- `%ProgramFiles%\Microsoft Visual Studio\18\Community\VC` contenía solo
+  `Auxiliary` y `Redist`; no existía el directorio `Tools\MSVC`.
+- Una búsqueda de `cl.exe` en las raíces de Visual Studio no devolvía resultados.
+- `c74support/min-devkit/build/CMakeCache.txt` registraba como linker
+  `%ProgramFiles(x86)%/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe`,
+  y ese directorio ya no existía en ese momento.
 
 Los `.mxe64` existentes demuestran que la cadena funcionó en este equipo en el
 pasado. El bloqueo es de entorno, no de diseño del proyecto.
