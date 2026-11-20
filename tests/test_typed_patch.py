@@ -75,6 +75,40 @@ class TestContractEngine(unittest.TestCase):
         plugout_inlets = self.engine.get_inlets("plugout~")
         self.assertEqual(len(plugout_inlets), 2)
 
+    def test_kslider_and_hexslider_ui_archetype_contracts(self):
+        # kslider
+        kslider_inlets = self.engine.get_inlets("kslider")
+        self.assertEqual(len(kslider_inlets), 2)
+        self.assertEqual(kslider_inlets[0]["type"], "int")
+        self.assertEqual(kslider_inlets[1]["type"], "int")
+        self.assertEqual(self.engine.resolve_inlet_index("kslider", "pitch"), 0)
+        self.assertEqual(self.engine.resolve_inlet_index("kslider", "velocity"), 1)
+
+        kslider_outlets = self.engine.get_outlets("kslider")
+        self.assertEqual(len(kslider_outlets), 2)
+        self.assertEqual(kslider_outlets[0]["type"], "int")
+        self.assertEqual(kslider_outlets[1]["type"], "int")
+
+        # wilson.hexslider
+        hex_inlets = self.engine.get_inlets("wilson.hexslider")
+        self.assertEqual(len(hex_inlets), 2)
+        self.assertEqual(self.engine.resolve_inlet_index("wilson.hexslider", "input"), 0)
+        self.assertEqual(self.engine.resolve_inlet_index("wilson.hexslider", "velocity"), 1)
+
+        hex_outlets = self.engine.get_outlets("wilson.hexslider")
+        self.assertEqual(len(hex_outlets), 3)
+        self.assertEqual(hex_outlets[0]["type"], "float")
+        self.assertEqual(hex_outlets[1]["type"], "int")
+        self.assertEqual(hex_outlets[2]["type"], "list")
+
+        # wilson.core
+        core_inlets = self.engine.get_inlets("wilson.core")
+        self.assertEqual(len(core_inlets), 1)
+        core_outlets = self.engine.get_outlets("wilson.core")
+        self.assertEqual(len(core_outlets), 3)
+        self.assertEqual(core_outlets[0]["name"], "ratios")
+        self.assertEqual(core_outlets[1]["name"], "frequencies")
+
 
 
 class TestTypedPatch(unittest.TestCase):

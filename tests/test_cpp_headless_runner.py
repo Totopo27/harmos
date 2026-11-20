@@ -103,6 +103,24 @@ class TestCppHeadlessRunner(unittest.TestCase):
         self.assertEqual(report_fail.failures[0].case.fn, "reduce_to_octave")
         self.assertIn("Discrepancia numerica", report_fail.failures[0].reason)
 
+    def test_run_headless_hexslider_kernel_pass(self):
+        if not self.compiler:
+            self.skipTest("Compilador C++ no disponible")
+
+        hexslider_header = Path("benchmarks/teclados-wilson/wilson_hexslider_kernel.hpp").resolve()
+        self.assertTrue(hexslider_header.exists(), f"No se encontro {hexslider_header}")
+
+        cases = [
+            TestCase(fn="compute_cell_frequency", args=[0, 0], expected=261.625565, tolerance=1e-5),
+            TestCase(fn="hit_test", args=[12.0, 10.3923], expected=0, tolerance=1e-5),
+            TestCase(fn="hit_test", args=[0.0, 0.0], expected=-1, tolerance=1e-5),
+        ]
+
+        report = run_headless_cases(hexslider_header, cases, kernel_class="hexslider")
+        self.assertEqual(report.verdict, "PASS")
+        self.assertEqual(report.passed_cases, 3)
+        self.assertEqual(report.failed_cases, 0)
+
     def test_run_headless_generated_kernel(self):
         if not self.compiler:
             self.skipTest("Compilador C++ no disponible")

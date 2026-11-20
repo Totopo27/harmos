@@ -107,6 +107,25 @@ def generate_cpp_harness(
             lines.append("    } catch (...) {")
             lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
             lines.append("    }")
+    elif kernel_class == "hexslider":
+        lines.append("    harmos::kernels::wilson::HexsliderKernel kernel;")
+        for idx, c in enumerate(cases):
+            lines.append("    try {")
+            if c.fn == "hit_test":
+                arg0 = c.args[0] if len(c.args) > 0 else 0.0
+                arg1 = c.args[1] if len(c.args) > 1 else 0.0
+                lines.append(f"        int out_val = kernel.hit_test({float(arg0)}, {float(arg1)});")
+                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
+            else:
+                arg0 = c.args[0] if len(c.args) > 0 else 0
+                arg1 = c.args[1] if len(c.args) > 1 else 0
+                lines.append(f"        double out_val = kernel.compute_cell_frequency({int(arg0)}, {int(arg1)});")
+                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
+            lines.append("    } catch (const std::exception& e) {")
+            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
+            lines.append("    } catch (...) {")
+            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
+            lines.append("    }")
     elif kernel_class == "dsp":
         type_name = kernel_type_name or "harmos_demoKernel"
         lines.append(f"    harmos::kernels::{type_name} kernel;")

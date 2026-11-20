@@ -191,6 +191,44 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertEqual(res_diff.returncode, 0, f"diff headless failed: {res_diff.stderr}")
         self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_diff.stdout)
 
+    def test_cli_harvest_and_diff_hexslider(self):
+        cases_file = os.path.join(self.temp_dir, "cases_hexslider.jsonl")
+        hexslider_kernel = os.path.join("benchmarks", "teclados-wilson", "wilson_hexslider_kernel.hpp")
+
+        import subprocess
+        import sys
+
+        # 1. Harvest hexslider
+        harvest_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "harvest",
+            "--suite", "hexslider",
+            "--out", cases_file
+        ]
+        res_harvest = subprocess.run(harvest_cmd, capture_output=True, text=True)
+        self.assertEqual(res_harvest.returncode, 0, f"harvest failed: {res_harvest.stderr}")
+        self.assertTrue(os.path.exists(cases_file))
+
+        # 2. Python diff
+        diff_py_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "diff",
+            cases_file,
+            "--suite", "hexslider"
+        ]
+        res_py_diff = subprocess.run(diff_py_cmd, capture_output=True, text=True)
+        self.assertEqual(res_py_diff.returncode, 0, f"python diff failed: {res_py_diff.stderr}")
+        self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_py_diff.stdout)
+
+        # 3. Headless C++ diff
+        diff_cpp_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "diff",
+            cases_file,
+            "--cpp-kernel", hexslider_kernel,
+            "--kernel-class", "hexslider"
+        ]
+        res_cpp_diff = subprocess.run(diff_cpp_cmd, capture_output=True, text=True)
+        self.assertEqual(res_cpp_diff.returncode, 0, f"cpp diff failed: {res_cpp_diff.stderr}")
+        self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_cpp_diff.stdout)
+
 
 
 
