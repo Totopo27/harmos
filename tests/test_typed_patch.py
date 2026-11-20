@@ -122,6 +122,18 @@ class TestContractEngine(unittest.TestCase):
         self.assertEqual(fret_outlets[2]["type"], "list")
         self.assertEqual(fret_outlets[3]["type"], "list")
 
+        # harmos.truax
+        truax_inlets = self.engine.get_inlets("harmos.truax")
+        self.assertEqual(len(truax_inlets), 3)
+        self.assertEqual(self.engine.resolve_inlet_index("harmos.truax", "fundamental_hz"), 0)
+        self.assertEqual(self.engine.resolve_inlet_index("harmos.truax", "c_ratio"), 1)
+        self.assertEqual(self.engine.resolve_inlet_index("harmos.truax", "m_ratio"), 2)
+
+        truax_outlets = self.engine.get_outlets("harmos.truax")
+        self.assertEqual(len(truax_outlets), 2)
+        self.assertEqual(truax_outlets[0]["type"], "float")
+        self.assertEqual(truax_outlets[1]["type"], "list")
+
 
 
 class TestTypedPatch(unittest.TestCase):

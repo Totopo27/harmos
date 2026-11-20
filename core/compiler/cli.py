@@ -364,7 +364,7 @@ def main():
     diff_parser.add_argument("cases", help="Ruta al archivo cases.jsonl")
     diff_parser.add_argument("--suite", choices=["truax", "wilson", "hexslider"], default="truax", help="Registro objetivo a evaluar")
     diff_parser.add_argument("--cpp-kernel", help="Ruta al header de kernel C++ puro (*_kernel.hpp) para evaluacion headless en CI")
-    diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp", "hexslider"], default="wilson", help="Tipo de arnes C++ a generar")
+    diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp", "hexslider", "truax"], default="wilson", help="Tipo de arnes C++ a generar")
     diff_parser.add_argument("--kernel-type-name", help="Nombre exacto del tipo C++ (para control/dsp)")
 
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'

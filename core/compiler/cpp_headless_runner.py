@@ -126,6 +126,25 @@ def generate_cpp_harness(
             lines.append("    } catch (...) {")
             lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
             lines.append("    }")
+    elif kernel_class == "truax":
+        for idx, c in enumerate(cases):
+            lines.append("    try {")
+            if c.fn == "to_normal_form":
+                arg0 = c.args[0] if len(c.args) > 0 else 1.0
+                arg1 = c.args[1] if len(c.args) > 1 else 1.0
+                lines.append(f"        auto out_val = harmos::kernels::truax::TruaxKernel::to_normal_form({float(arg0)}, {float(arg1)});")
+                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": [" << out_val.first << ", " << out_val.second << "]}}\\n";')
+            else:
+                arg0 = c.args[0] if len(c.args) > 0 else 220.0
+                arg1 = c.args[1] if len(c.args) > 1 else 1.0
+                arg2 = c.args[2] if len(c.args) > 2 else 1.0
+                lines.append(f"        double out_val = harmos::kernels::truax::TruaxKernel::calc_carrier_freq({float(arg0)}, {float(arg1)}, {float(arg2)});")
+                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
+            lines.append("    } catch (const std::exception& e) {")
+            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
+            lines.append("    } catch (...) {")
+            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
+            lines.append("    }")
     elif kernel_class == "dsp":
         type_name = kernel_type_name or "harmos_demoKernel"
         lines.append(f"    harmos::kernels::{type_name} kernel;")
