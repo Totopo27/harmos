@@ -16,6 +16,7 @@ Contrato Operativo (Hard Rules):
 import sys
 import os
 import time
+import uuid
 import argparse
 import subprocess
 from pathlib import Path
@@ -71,8 +72,11 @@ def resolve_max_executable() -> Optional[Path]:
     return None
 
 
-def resolve_max_log_path() -> Optional[Path]:
-    """Localiza el archivo Max.log en el directorio de usuario."""
+def resolve_max_log_path(max_exe: Optional[Path] = None) -> Optional[Path]:
+    """
+    Localiza el archivo Max.log en el directorio de usuario.
+    Si se suministra max_exe, prioriza la subcarpeta correspondiente a la version.
+    """
     appdata = os.environ.get("APPDATA")
     if not appdata:
         return None
@@ -81,11 +85,43 @@ def resolve_max_log_path() -> Optional[Path]:
     if not base.exists():
         return None
 
+    # Priorizar por version detectada en el ejecutable
+    if max_exe:
+        exe_str = str(max_exe).lower()
+        if "max 9" in exe_str:
+            v9_candidates = list(base.glob("*Max 9*/Max.log"))
+            if v9_candidates and v9_candidates[0].is_file():
+                return v9_candidates[0]
+        elif "max 8" in exe_str:
+            v8_candidates = list(base.glob("*Max 8*/Max.log"))
+            if v8_candidates and v8_candidates[0].is_file():
+                return v8_candidates[0]
+
     for log_candidate in base.glob("**/Max.log"):
         if log_candidate.is_file():
             return log_candidate
 
     return None
+
+
+def read_log_delta_binary(max_log: Path, log_size_before: int, sentinel_bytes: Optional[bytes] = None) -> List[str]:
+    """
+    Lee de forma determinista el delta de Max.log abriendo en modo binario ('rb')
+    para evitar desajustes de offset por caracteres CRLF (\\r\\n) en Windows.
+    Si existe un marcador centinela, extrae unicamente lo posterior a el.
+    """
+    if not max_log or not max_log.is_file():
+        return []
+
+    with open(max_log, "rb") as f:
+        f.seek(log_size_before)
+        raw_bytes = f.read()
+
+    if sentinel_bytes and sentinel_bytes in raw_bytes:
+        raw_bytes = raw_bytes.split(sentinel_bytes, 1)[1]
+
+    decoded = raw_bytes.decode("utf-8", errors="replace")
+    return [line.strip() for line in decoded.splitlines() if line.strip()]
 
 
 def audit_patcher_live(patcher_path: Path, timeout_seconds: int = 10) -> Tuple[str, List[str]]:
@@ -105,12 +141,26 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = 10) -> Tuple[s
             "Instale Cycling '74 Max o configure la variable MAX_PATH.",
         ]
 
-    max_log = resolve_max_log_path()
+    max_log = resolve_max_log_path(max_exe)
     log_size_before = max_log.stat().st_size if max_log and max_log.is_file() else 0
+
+    # Inyeccion de marcador centinela en modo binario para aislar la sesion actual
+    run_id = str(uuid.uuid4())[:8]
+    sentinel_str = f"\n=== HARMOS_AUDIT_SENTINEL_{run_id} ===\n"
+    sentinel_bytes = sentinel_str.strip().encode("utf-8")
+
+    if max_log and max_log.exists():
+        try:
+            with open(max_log, "ab") as f:
+                f.write(sentinel_str.encode("utf-8"))
+            log_size_before = max_log.stat().st_size
+        except Exception:
+            # Si el log esta bloqueado, procedemos con offset por bytes
+            pass
 
     print(f"[*] Binario Max detectado: {max_exe}")
     print(f"[*] Lanzando patcher: {patcher_path.name}")
-    print(f"[*] Esperando estabilizacion ({timeout_seconds}s)...")
+    print(f"[*] Sondeando telemetria en vivo (timeout max: {timeout_seconds}s)...")
 
     # Iniciar Max con el patcher
     try:
@@ -118,8 +168,33 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = 10) -> Tuple[s
     except Exception as e:
         return "FAIL", [f"Error al iniciar Max.exe: {e}"]
 
+    # Sondeo reactivo en lugar de sleep() ciego
+    start_time = time.time()
+    poll_interval = 0.5
+    stable_checks = 0
+    last_known_size = log_size_before
+
     try:
-        time.sleep(timeout_seconds)
+        while (time.time() - start_time) < timeout_seconds:
+            time.sleep(poll_interval)
+            
+            # Verificar si el proceso termino anticipadamente (ej. crash)
+            if proc.poll() is not None:
+                break
+
+            if max_log and max_log.is_file():
+                try:
+                    current_size = max_log.stat().st_size
+                    if current_size > last_known_size:
+                        last_known_size = current_size
+                        stable_checks = 0
+                    else:
+                        stable_checks += 1
+                        # Si tras al menos 2.5s el log no registra mas escrituras, consideramos estable
+                        if stable_checks >= 3 and (time.time() - start_time) >= 2.5:
+                            break
+                except OSError:
+                    pass
     finally:
         # Cerrar el proceso para no dejar procesos huerfanos en CI/testing
         try:
@@ -134,14 +209,11 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = 10) -> Tuple[s
     if not max_log or not max_log.is_file():
         return "BLOCKED", ["No se encontro Max.log para auditar telemetria de ejecucion."]
 
-    # Leer las lineas agregadas durante la sesion
-    new_lines = []
+    # Leer delta binario
     try:
-        with open(max_log, "r", encoding="utf-8", errors="ignore") as f:
-            f.seek(log_size_before)
-            new_lines = f.readlines()
+        new_lines = read_log_delta_binary(max_log, log_size_before, sentinel_bytes)
     except Exception as e:
-        return "FAIL", [f"Error leyendo Max.log: {e}"]
+        return "FAIL", [f"Error leyendo Max.log en modo binario: {e}"]
 
     # Analizar si hay lineas rojas o advertencias
     detected_errors = []
@@ -156,7 +228,10 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = 10) -> Tuple[s
     if detected_errors:
         return "FAIL", detected_errors
 
-    return "PASS", [f"Sesion completada limpiamente. {len(new_lines)} lineas registradas sin errores."]
+    return "PASS", [
+        f"Sesion completada limpiamente ({len(new_lines)} lineas registradas sin errores de consola).",
+        "Alcance: Certifica legalidad de parches y contratos. (No certifica equivalencia matematica ni DSP; ver I11)."
+    ]
 
 
 def main():
