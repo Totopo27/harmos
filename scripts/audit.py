@@ -82,12 +82,21 @@ def resolve_max_executable() -> Optional[Path]:
         except Exception:
             pass
 
-    # Rutas por defecto en Windows
-    candidates = [
-        Path(r"D:\Program Files\Cycling '74\Max 9\Max.exe"),
-        Path(r"C:\Program Files\Cycling '74\Max 9\Max.exe"),
-        Path(r"C:\Program Files\Cycling '74\Max 8\Max.exe"),
+    # Rutas por defecto en Windows, compuestas desde variables de entorno:
+    # el codigo nunca codifica rutas absolutas de host.
+    roots = [
+        os.environ.get("ProgramW6432"),
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
     ]
+    candidates = []
+    for root in roots:
+        if not root:
+            continue
+        for version in ("Max 9", "Max 8"):
+            candidate = Path(root) / "Cycling '74" / version / "Max.exe"
+            if candidate not in candidates:
+                candidates.append(candidate)
     for c in candidates:
         if c.is_file():
             return c
@@ -247,6 +256,9 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     Devuelve (veredicto, detalle_lineas).
     Veredictos posibles: PASS, FAIL, BLOCKED.
     """
+    # Max no abre rutas relativas: se resuelve a absoluta antes de lanzarlo.
+    patcher_path = patcher_path.expanduser().resolve()
+
     if not patcher_path.is_file():
         return "FAIL", [f"El archivo objetivo no existe: {patcher_path}"]
 
