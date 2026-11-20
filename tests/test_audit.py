@@ -33,7 +33,7 @@ def _line(level="info", message="linea", when=None, pid=4242):
 
 def _session(when=None, pid=4242, extra=None):
     lines = [
-        _line("info", "max logging initialized: logging to C:/logs", when, pid),
+        _line("info", "max logging initialized: logging to logs", when, pid),
         _line("info", "Max is starting: Version 9.1.5", when, pid),
     ]
     lines.extend(extra or [])

@@ -3,6 +3,7 @@ Tests TDD para el Extractor de Control y Tablas de SuperCollider (SCControlExtra
 Verifica la extracción estática de diccionarios de afinación (tunings.scd), generadores de arrays,
 y la síntesis automática de la sección data_tables y control_interfaces en la IR.
 """
+import os
 import unittest
 from pathlib import Path
 from core.compiler.sc_control_extractor import SCControlExtractor
@@ -11,12 +12,13 @@ from core.compiler.sc_control_extractor import SCControlExtractor
 class TestSCControlExtractor(unittest.TestCase):
     def setUp(self):
         self.extractor = SCControlExtractor()
-        self.tunings_path = Path(r"D:\DocumentosDiscoD\SCMicroSynth\modules\tunings.scd")
+        root = os.environ.get("SCMICROSYNTH_ROOT")
+        self.tunings_path = Path(root) / "modules" / "tunings.scd" if root else None
 
     def test_extract_scales_and_methods_from_tunings_code(self):
         """Verifica la detección automática de todas las escalas definidas en tunings.scd."""
-        if not self.tunings_path.exists():
-            self.skipTest("Ruta local a SCMicroSynth/modules/tunings.scd no disponible.")
+        if not self.tunings_path or not self.tunings_path.exists():
+            self.skipTest("Defina SCMICROSYNTH_ROOT apuntando al proyecto SCMicroSynth.")
 
         with open(self.tunings_path, "r", encoding="utf-8") as f:
             code = f.read()

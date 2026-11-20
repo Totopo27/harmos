@@ -30,7 +30,7 @@ Para compilar binarios de 64 bits nativos (`.mxe64`) compatibles con la ABI (App
 * **CMake**: Versión `>= 3.25` (viene integrado en Visual Studio o se puede instalar independientemente).
 * **Git**: Necesario para clonar repositorios con submódulos recursivos.
 * **Max 8 o Max 9**: Instalado en la ruta por defecto:
-  * `C:\Program Files\Cycling '74\Max 8` (o `Max 9`).
+  * `%ProgramFiles%\Cycling '74\Max 8` (o `Max 9`).
 
 ---
 
@@ -40,7 +40,7 @@ El truco fundamental para trabajar cómodo en Max es colocar tus proyectos dentr
 
 ### Ruta del Paquete del Usuario:
 ```text
-C:\Users\<TuUsuario>\Documents\Max 8\Packages\mi-libreria-externals\
+%USERPROFILE%\Documents\Max 8\Packages\mi-libreria-externals\
 ```
 
 ### Árbol de Proyecto Recomendado:

@@ -2,6 +2,7 @@ r"""
 Tests TDD para la extracción de SynthDefs del proyecto real SCMicroSynth (engine.scd).
 Vertical Slice 4: Ingesta del archivo real y validación de los grafos \fmVoice, \syncVoice y \masterStage.
 """
+import os
 import unittest
 from pathlib import Path
 from core.compiler.ast_extractor import extract_ir_from_file
@@ -10,11 +11,12 @@ from core.compiler.sc_ast_extractor import SCAstExtractor
 
 class TestRealEngineSCIngestion(unittest.TestCase):
     def setUp(self):
-        self.engine_path = Path(r"D:\DocumentosDiscoD\SCMicroSynth\modules\engine.scd")
+        root = os.environ.get("SCMICROSYNTH_ROOT")
+        self.engine_path = Path(root) / "modules" / "engine.scd" if root else None
 
     def test_ingest_real_sc_engine_file(self):
-        if not self.engine_path.exists():
-            self.skipTest("Ruta local a SCMicroSynth/modules/engine.scd no disponible.")
+        if not self.engine_path or not self.engine_path.exists():
+            self.skipTest("Defina SCMICROSYNTH_ROOT apuntando al proyecto SCMicroSynth.")
 
         with open(self.engine_path, "r", encoding="utf-8") as f:
             code = f.read()

@@ -15,8 +15,8 @@ from pathlib import Path
 
 # Patrones prohibidos en archivos trackeados
 FORBIDDEN_PATTERNS = [
-    (r"[a-zA-Z]:\\\\", "Ruta absoluta con letra de unidad Windows"),
-    (r"C:\\\\Users", "Ruta de usuario Windows"),
+    (r"(?<![A-Za-z])C:[\\/]Users[\\/]", "Ruta de usuario Windows"),
+    (r"(?<![A-Za-z])[A-Za-z]:[\\/]", "Ruta absoluta con letra de unidad Windows"),
     (r"/home/[a-zA-Z0-9_-]+/", "Ruta absoluta de usuario Linux/macOS"),
     (r"ghp_[a-zA-Z0-9]{20,}", "GitHub Personal Access Token"),
     (r"gho_[a-zA-Z0-9]{20,}", "GitHub OAuth Token"),
