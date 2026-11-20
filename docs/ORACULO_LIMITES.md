@@ -21,7 +21,7 @@ Cuando `scripts/audit.py` emite un veredicto `PASS`, garantiza de forma verifica
 1. **Validez Estricta de Contratos**: Todos los patchcords cumplen con los tipos de inlets y outlets definidos en `core/schema/max_contracts.json`. No existen cables a etiquetas `comment` ni índices erróneos en objetos sensibles (ej. `midiformat`).
 2. **Conformidad de Esquema**: La Representación Intermedia (`.ir.json`) cumple al 100% con `core/schema/max_object_ir.schema.json`.
 3. **Carga Limpia en Tiempo Real**: Una instancia real de `Max.exe` cargó el parche `.maxpat` y la consola interna (`Max.log`) no registró advertencias de tipo (`doesn't match type`), objetos inexistentes (`no such object`) ni violaciones de acceso (`fatal: access violation`).
-4. **Procedencia Inmutable**: Si existe `emitted-from.json`, el parche corresponde exactamente a la versión de los contratos con la que fue emitido (`core.compiler.provenance`).
+4. **Procedencia Inmutable**: Si existe `emitted-from.json`, el parche corresponde exactamente a la versión de los contratos con la que fue emitido (`core.compiler.provenance`), y los artefactos emitidos (`.maxpat`, `.cpp`, `CMakeLists.txt`) coinciden byte a byte con las huellas SHA-256 registradas. Si la evidencia no puede leerse, el veredicto es `UNVERIFIABLE` y nunca `VALID`. Un registro sin huella de artefactos (formato previo) certifica solo los insumos y lo declara explícitamente en el detalle.
 
 ---
 
@@ -45,6 +45,9 @@ Un veredicto `PASS` **nunca debe interpretarse como prueba de equivalencia algor
 | **`BLOCKED (RUNTIME_UNAVAILABLE)`** | `Max.exe` no está instalado o no se detectó en el host. | Prohibido certificar. Se requiere entorno con Cycling '74 Max. |
 | **`STALE_CONTRACTS`** | `max_contracts.json` cambió tras la emisión del parche (`verify-provenance`). | Recompilar el parche a partir del IR para actualizar índices y tipos. |
 | **`STALE_IR` / `STALE_SOURCE`** | El IR o el código fuente original fueron alterados post-emisión. | Re-ejecutar el pipeline de compilación. |
+| **`STALE_ARTIFACTS`** | Un artefacto emitido (`.maxpat`, `.cpp`, `CMakeLists.txt`) difiere de la huella SHA-256 registrada. | Bloqueo estricto. Recompilar y descartar el parche alterado. |
+| **`UNVERIFIABLE`** | La evidencia necesaria no existe o no puede leerse (contratos ilegibles, artefacto registrado ausente, huella no registrada). | Prohibido certificar. Restituir la evidencia y re-verificar; nunca se degrada a `VALID`. |
+| **`INVALID`** | `emitted-from.json` no existe o no es JSON parseable. | Prohibido certificar. Regenerar el paquete. |
 
 ---
 

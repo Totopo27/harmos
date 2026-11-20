@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from core.compiler.typed_patch import TypedPatch
 from core.compiler.ast_extractor import extract_ir_from_file
@@ -160,7 +160,15 @@ def compile_ir(ir_file_path: str, output_dir: str, source_path: Optional[str] = 
     generate_cmakelists(object_name, cmake_path)
 
     # Generar huella de procedencia criptográfica (emitted-from.json)
-    prov_record = build_provenance_record(ir_file_path, source_path=source_path)
+    prov_record = build_provenance_record(
+        ir_file_path,
+        source_path=source_path,
+        artifacts={
+            "maxpat": maxpat_path,
+            "cpp": cpp_path,
+            "cmake": cmake_path,
+        }
+    )
     prov_path = write_provenance_file(output_dir, prov_record)
 
     return {
@@ -195,8 +203,12 @@ def main():
     verify_prov_parser.add_argument("--ir", default=None, help="Ruta al archivo IR actual (opcional)")
     verify_prov_parser.add_argument("--source", default=None, help="Ruta al código fuente actual (opcional)")
 
+    # Subcomando bench
+    bench_parser = subparsers.add_parser("bench", help="Ejecutar suite de benchmarks con veredicto explicito SHIP / NO_SHIP")
+    bench_parser.add_argument("--suite", choices=["truax", "tables", "all"], default="all", help="Suite a evaluar")
+
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
-    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "-h", "--help"]:
         sys.argv.insert(1, "compile")
 
     args = parser.parse_args()
@@ -219,6 +231,27 @@ def main():
             for d in details:
                 print(f"  {d}")
             if verdict != "VALID":
+                sys.exit(1)
+        elif args.command == "bench":
+            from scripts.bench import benchmark_truax_normal_form, benchmark_scale_generation_384
+            suites = []
+            if args.suite in ["truax", "all"]:
+                suites.append(benchmark_truax_normal_form())
+            if args.suite in ["tables", "all"]:
+                suites.append(benchmark_scale_generation_384())
+
+            all_ship = True
+            print("\n" + "=" * 50)
+            print(" HARMOS BENCHMARK VERDICTS")
+            print("=" * 50)
+            for v in suites:
+                print(f"[*] {v.name}: [{v.verdict}] ({v.mean_latency_us:.2f} us)")
+                for r in v.reasons:
+                    print(f"    - {r}")
+                if v.verdict != "SHIP":
+                    all_ship = False
+            print("-" * 50)
+            if not all_ship:
                 sys.exit(1)
         else:
             parser.print_help()
