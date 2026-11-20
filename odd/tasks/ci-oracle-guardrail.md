@@ -21,3 +21,4 @@ guardrail de privacidad y contratos, y suite unitaria en CI.
 ## Log
 
 - L1: "Pero igual hay que hacer ambas, cierto, así que el orden decidelo tú" — Inicio de Fase 3: CI & Oráculo Automatizado como base previa a los benchmarks de UI.
+- L2: PR #7 creado (https://github.com/Totopo27/harmos/pull/7). Ejecución multiplataforma en GitHub Actions (ubuntu-latest y windows-latest) completada exitosamente con 100% PASS en guardrail, suite unitaria y oráculo headless C++ diferencial.
