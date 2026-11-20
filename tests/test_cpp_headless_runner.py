@@ -121,6 +121,24 @@ class TestCppHeadlessRunner(unittest.TestCase):
         self.assertEqual(report.passed_cases, 3)
         self.assertEqual(report.failed_cases, 0)
 
+    def test_run_headless_truax_kernel_pass(self):
+        if not self.compiler:
+            self.skipTest("Compilador C++ no disponible")
+
+        truax_header = Path("core/compiler/truax_kernel.hpp").resolve()
+        self.assertTrue(truax_header.exists(), f"No se encontro {truax_header}")
+
+        cases = [
+            TestCase(fn="to_normal_form", args=[1.0, 1.0], expected=[1.0, 1.0], tolerance=1e-7),
+            TestCase(fn="to_normal_form", args=[3.0, 2.0], expected=[1.0, 2.0], tolerance=1e-7),
+            TestCase(fn="calc_carrier_freq", args=[220.0, 3.0, 2.0], expected=660.0, tolerance=1e-7)
+        ]
+
+        report = run_headless_cases(truax_header, cases, kernel_class="truax")
+        self.assertEqual(report.verdict, "PASS")
+        self.assertEqual(report.passed_cases, 3)
+        self.assertEqual(report.failed_cases, 0)
+
     def test_run_headless_generated_kernel(self):
         if not self.compiler:
             self.skipTest("Compilador C++ no disponible")

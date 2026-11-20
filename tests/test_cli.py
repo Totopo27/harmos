@@ -229,6 +229,34 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertEqual(res_cpp_diff.returncode, 0, f"cpp diff failed: {res_cpp_diff.stderr}")
         self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_cpp_diff.stdout)
 
+    def test_cli_harvest_and_diff_truax_cpp_headless(self):
+        cases_file = os.path.join(self.temp_dir, "cases_truax.jsonl")
+        truax_kernel = os.path.join("core", "compiler", "truax_kernel.hpp")
+
+        import subprocess
+        import sys
+
+        # 1. Harvest truax
+        harvest_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "harvest",
+            "--suite", "truax",
+            "--out", cases_file
+        ]
+        res_harvest = subprocess.run(harvest_cmd, capture_output=True, text=True)
+        self.assertEqual(res_harvest.returncode, 0, f"harvest failed: {res_harvest.stderr}")
+        self.assertTrue(os.path.exists(cases_file))
+
+        # 2. Headless C++ diff
+        diff_cpp_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "diff",
+            cases_file,
+            "--cpp-kernel", truax_kernel,
+            "--kernel-class", "truax"
+        ]
+        res_cpp_diff = subprocess.run(diff_cpp_cmd, capture_output=True, text=True)
+        self.assertEqual(res_cpp_diff.returncode, 0, f"cpp diff failed: {res_cpp_diff.stderr}")
+        self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_cpp_diff.stdout)
+
 
 
 

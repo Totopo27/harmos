@@ -118,6 +118,17 @@
         "2": { "name": "cents", "type": "list", "description": "Cent deviations relative to 1/1" }
       }
     },
+    "harmos.truax": {
+      "inlets": {
+        "0": { "name": "fundamental_hz", "type": "float", "description": "Target acoustic fundamental frequency in Hz" },
+        "1": { "name": "c_ratio", "type": "float", "description": "Carrier ratio factor C" },
+        "2": { "name": "m_ratio", "type": "float", "description": "Modulator ratio factor M" }
+      },
+      "outlets": {
+        "0": { "name": "carrier_freq_hz", "type": "float", "description": "Compensated carrier frequency in Hz according to Truax Normal Form" },
+        "1": { "name": "normal_form", "type": "list", "description": "Reduced Normal Form ratio [normal_c, normal_m]" }
+      }
+    },
     "scale": {
       "inlets": {
         "0": { "name": "input_value", "type": "float" },
