@@ -21,7 +21,7 @@ Seguimiento ODD de tareas por commits unitarios atómicos.
 - [x] T5 (S6) [inline]: Refactorizar emisión C++ desacoplando Kernel Puro y Binding Min-Devkit. Commit: 70084a0
 - [x] T6 (S2) [inline]: Reemplazar aislamiento por centinela/offset por anclaje al header de sesión, parsing estructural de niveles, veredicto fail-closed, resolución de rutas relativas y eliminación de rutas absolutas del código. Commit: cf586ac
 - [x] T7 (S7) [inline]: Corregir reproducibilidad del benchmark (F2: muestreo multi-ronda intercalado, medianas, dispersión y lote musical de ratios) y desacoplar vocabulario de auditoría (F3: docs/ORACULO_LIMITES.md, scripts/bench.py, core/compiler/cli.py). Commit: a2bebd5
-- [x] T8 (S7) [inline]: Pase completo de hallazgos LOW (F5-F9: inversión core->scripts, min_speedup sin ref, serialización de dispersión, percentil p95 interpolado, CLI unificado, normalización de procedencia) y saneamiento ODD. Commit: pending
+- [x] T8 (S7) [inline]: Pase completo de hallazgos LOW (F5-F9: inversión core->scripts, min_speedup sin ref, serialización de dispersión, percentil p95 interpolado, CLI unificado, normalización de procedencia) y saneamiento ODD. Commit: 85fe5f5
 
 ## Log
 
