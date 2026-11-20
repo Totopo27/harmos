@@ -364,6 +364,9 @@ def main():
     diff_parser = subparsers.add_parser("diff", help="Evaluar equivalencia semantica de cases.jsonl contra un target")
     diff_parser.add_argument("cases", help="Ruta al archivo cases.jsonl")
     diff_parser.add_argument("--suite", choices=["truax", "wilson"], default="truax", help="Registro objetivo a evaluar")
+    diff_parser.add_argument("--cpp-kernel", help="Ruta al header de kernel C++ puro (*_kernel.hpp) para evaluacion headless en CI")
+    diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp"], default="wilson", help="Tipo de arnes C++ a generar")
+    diff_parser.add_argument("--kernel-type-name", help="Nombre exacto del tipo C++ (para control/dsp)")
 
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
     if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "harvest", "diff", "-h", "--help"]:
@@ -428,24 +431,33 @@ def main():
             print(f"Cosecha exitosa: {count} casos guardados en '{args.out}'.")
         elif args.command == "diff":
             cases = read_cases_jsonl(args.cases)
-            registry = {}
-            if args.suite == "truax":
-                from core.compiler.microtonal_engine import MicrotonalEngine
-                eng = MicrotonalEngine()
-                registry["to_normal_form"] = eng.to_normal_form
-                registry["calc_carrier_freq"] = eng.calc_carrier_freq
-            elif args.suite == "wilson":
-                def wilson_reduce_to_octave(ratio: float) -> float:
-                    if ratio <= 0.0:
-                        return 1.0
-                    while ratio >= 2.0:
-                        ratio /= 2.0
-                    while ratio < 1.0:
-                        ratio *= 2.0
-                    return ratio
-                registry["reduce_to_octave"] = wilson_reduce_to_octave
+            if getattr(args, "cpp_kernel", None):
+                from core.compiler.cpp_headless_runner import run_headless_cases
+                report = run_headless_cases(
+                    args.cpp_kernel,
+                    cases,
+                    kernel_class=args.kernel_class,
+                    kernel_type_name=args.kernel_type_name
+                )
+            else:
+                registry = {}
+                if args.suite == "truax":
+                    from core.compiler.microtonal_engine import MicrotonalEngine
+                    eng = MicrotonalEngine()
+                    registry["to_normal_form"] = eng.to_normal_form
+                    registry["calc_carrier_freq"] = eng.calc_carrier_freq
+                elif args.suite == "wilson":
+                    def wilson_reduce_to_octave(ratio: float) -> float:
+                        if ratio <= 0.0:
+                            return 1.0
+                        while ratio >= 2.0:
+                            ratio /= 2.0
+                        while ratio < 1.0:
+                            ratio *= 2.0
+                        return ratio
+                    registry["reduce_to_octave"] = wilson_reduce_to_octave
 
-            report = evaluate_diff(cases, registry)
+                report = evaluate_diff(cases, registry)
             print("\n" + "=" * 50)
             print(f" HARMOS ORACLE DIFF: {report.verdict} (SEMANTIC)")
             print("=" * 50)

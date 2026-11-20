@@ -156,6 +156,33 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertEqual(res_diff.returncode, 0, f"diff failed: {res_diff.stderr}")
         self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_diff.stdout)
 
+    def test_cli_diff_cpp_kernel_headless(self):
+        cases_file = os.path.join(self.temp_dir, "cases_wilson.jsonl")
+        wilson_kernel = os.path.join("benchmarks", "teclados-wilson", "wilson_kernel.hpp")
+        
+        import subprocess
+        import sys
+
+        # 1. Cosechar casos de Wilson
+        harvest_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "harvest",
+            "--suite", "wilson",
+            "--out", cases_file
+        ]
+        res_harvest = subprocess.run(harvest_cmd, capture_output=True, text=True)
+        self.assertEqual(res_harvest.returncode, 0, f"harvest failed: {res_harvest.stderr}")
+
+        # 2. Evaluar diff contra el kernel C++ desacoplado headless
+        diff_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "diff",
+            cases_file,
+            "--cpp-kernel", wilson_kernel,
+            "--kernel-class", "wilson"
+        ]
+        res_diff = subprocess.run(diff_cmd, capture_output=True, text=True)
+        self.assertEqual(res_diff.returncode, 0, f"diff headless failed: {res_diff.stderr}")
+        self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_diff.stdout)
+
 
 
 
