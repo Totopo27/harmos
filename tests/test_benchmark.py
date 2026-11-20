@@ -126,6 +126,31 @@ class TestBenchmarkEngine(unittest.TestCase):
         speedup_range = max(speedups) - min(speedups)
         self.assertLess(speedup_range, 0.5, f"Dispersion excesiva en speedup: {speedups}")
 
+    def test_min_speedup_without_reference_reports_reason(self):
+        """Verifica que min_speedup sin reference_fn no se ignora en silencio (F6)."""
+        budget = PerformanceBudget(max_latency_us=5000.0, min_speedup=2.0)
+        verdict = evaluate_benchmark(
+            name="Test No Ref but Min Speedup",
+            target_fn=lambda: 42,
+            budget=budget,
+            iterations=10,
+            rounds=2
+        )
+        self.assertTrue(any("Aceleracion no evaluable" in r for r in verdict.reasons))
+
+    def test_format_benchmark_report_and_get_standard_benchmarks(self):
+        """Verifica carga y renderizado unificado desacoplado de scripts (F5, F9b)."""
+        from core.compiler.benchmark import get_standard_benchmarks, format_benchmark_report
+
+        suites = get_standard_benchmarks("truax")
+        self.assertEqual(len(suites), 1)
+        self.assertIn("Truax", suites[0].name)
+
+        report = format_benchmark_report(suites)
+        self.assertIn("HARMOS PERFORMANCE BENCHMARK", report)
+        self.assertIn("docs/ORACULO_LIMITES.md", report)
+        self.assertIn("EVALUACION FINAL DE RENDIMIENTO", report)
+
 
 if __name__ == "__main__":
     unittest.main()

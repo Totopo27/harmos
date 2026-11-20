@@ -222,3 +222,101 @@ def evaluate_benchmark(
         speedup_dispersion=speedup_dispersion,
         reasons=reasons
     )
+
+
+def format_benchmark_report(verdicts: List[BenchmarkVerdict]) -> str:
+    """Genera un reporte textual consistente y desacoplado para CLI y scripts."""
+    lines = [
+        "=" * 65,
+        "      HARMOS PERFORMANCE BENCHMARK & TIMING EVALUATION",
+        "=" * 65,
+        "",
+        "[i] AVISO EPISTEMICO (docs/ORACULO_LIMITES.md):",
+        "    Esta evaluacion mide latencias en el interprete Python host (time.perf_counter_ns).",
+        "    No constituye una auditoria de ejecucion en vivo en Cycling '74 Max ni certifica",
+        "    rendimiento en el motor de audio DSP (reservado exclusivamente a scripts/audit.py).",
+        ""
+    ]
+    all_ship = True
+    for v in verdicts:
+        lines.append(f"[*] Benchmark: {v.name}")
+        lines.append(f"    Evaluacion:   [{v.verdict}]")
+        lines.append(
+            f"    Media:        {v.mean_latency_us:.3f} us (mediana: {v.median_latency_us:.3f} us, p95: {v.p95_latency_us:.3f} us)"
+        )
+        if v.speedup is not None:
+            disp_str = f" +/- {v.speedup_dispersion:.2f}x" if v.speedup_dispersion else ""
+            lines.append(f"    Aceleracion:  {v.speedup:.2f}x{disp_str} (ref media: {v.reference_mean_us:.3f} us)")
+        for r in v.reasons:
+            lines.append(f"    - {r}")
+        lines.append("")
+        if v.verdict != "SHIP":
+            all_ship = False
+
+    lines.append("-" * 65)
+    final_status = "SHIP (DENTRO DE PRESUPUESTO)" if all_ship else "NO_SHIP (FUERA DE PRESUPUESTO)"
+    lines.append(f"EVALUACION FINAL DE RENDIMIENTO: {final_status}")
+    lines.append("-" * 65)
+    return "\n".join(lines)
+
+
+def benchmark_truax_normal_form() -> BenchmarkVerdict:
+    """Benchmark estandar: reduccion a forma normal de Truax (MicrotonalEngine)."""
+    from core.compiler.microtonal_engine import MicrotonalEngine
+
+    engine = MicrotonalEngine()
+
+    ratios = [
+        (5.0, 3.0), (7.0, 4.0), (9.0, 8.0), (11.0, 6.0),
+        (13.0, 8.0), (15.0, 8.0), (17.0, 16.0), (19.0, 16.0)
+    ]
+    str_ratios = [f"{c}:{m}" for c, m in ratios]
+
+    def unoptimized_truax_batch():
+        res = []
+        for s in str_ratios:
+            parts = s.split(":")
+            c, m = float(parts[0]), float(parts[1])
+            while (c != m) and (m < (2.0 * c)):
+                c = abs(c - m)
+            res.append((c, m))
+        return res
+
+    def engine_truax_batch():
+        res = []
+        for c, m in ratios:
+            res.append(engine.to_normal_form(c, m))
+        return res
+
+    return evaluate_benchmark(
+        name="Truax Normal Form Reduction (Microtonal Engine)",
+        target_fn=engine_truax_batch,
+        reference_fn=unoptimized_truax_batch,
+        budget=PerformanceBudget(max_latency_us=50.0, min_speedup=1.0, max_p95_latency_us=100.0),
+        iterations=500,
+        rounds=5
+    )
+
+
+def benchmark_scale_generation_384() -> BenchmarkVerdict:
+    """Benchmark estandar: generacion de tablas de afinacion de 384 posiciones."""
+    from core.compiler.microtonal_engine import MicrotonalEngine
+
+    engine = MicrotonalEngine()
+    return evaluate_benchmark(
+        name="Generacion de Tablas de Afinacion (384 posiciones)",
+        target_fn=lambda: engine.generate_all_scales(),
+        budget=PerformanceBudget(max_latency_us=2000.0, max_p95_latency_us=3000.0),
+        iterations=50,
+        rounds=3
+    )
+
+
+def get_standard_benchmarks(suite: str = "all") -> List[BenchmarkVerdict]:
+    """Ejecuta y compila la suite de benchmarks solicitada ('truax', 'tables', 'all')."""
+    suites = []
+    if suite in ["truax", "all"]:
+        suites.append(benchmark_truax_normal_form())
+    if suite in ["tables", "all"]:
+        suites.append(benchmark_scale_generation_384())
+    return suites

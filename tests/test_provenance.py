@@ -307,6 +307,19 @@ class TestProvenanceFailsClosed(unittest.TestCase):
         self.assertIn("source_path", hints)
         self.assertIn("return", hints)
 
+    def test_compute_sha256_newline_invariant(self):
+        """Verifica que archivos de texto con CRLF y LF producen huellas SHA-256 identicas (F9c)."""
+        crlf_file = self.dir_path / "sample_crlf.json"
+        lf_file = self.dir_path / "sample_lf.json"
+
+        crlf_file.write_bytes(b'{\r\n  "key": "value"\r\n}\r\n')
+        lf_file.write_bytes(b'{\n  "key": "value"\n}\n')
+
+        hash_crlf = compute_file_sha256(crlf_file)
+        hash_lf = compute_file_sha256(lf_file)
+
+        self.assertEqual(hash_crlf, hash_lf, "Los hashes deben ser identicos independientemente de los saltos de linea.")
+
 
 if __name__ == "__main__":
     unittest.main()

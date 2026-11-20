@@ -189,30 +189,10 @@ def main():
             if verdict != "VALID":
                 sys.exit(1)
         elif args.command == "bench":
-            from scripts.bench import benchmark_truax_normal_form, benchmark_scale_generation_384
-            suites = []
-            if args.suite in ["truax", "all"]:
-                suites.append(benchmark_truax_normal_form())
-            if args.suite in ["tables", "all"]:
-                suites.append(benchmark_scale_generation_384())
-
-            all_ship = True
-            print("\n" + "=" * 60)
-            print(" HARMOS BENCHMARK & TIMING EVALUATION")
-            print("=" * 60)
-            print(
-                "[i] AVISO: Evaluacion en Python host. No certifica DSP en Max MSP (ver docs/ORACULO_LIMITES.md).\n"
-            )
-            for v in suites:
-                speedup_info = f", speedup: {v.speedup:.2f}x" if v.speedup is not None else ""
-                print(f"[*] {v.name}: [{v.verdict}] (mediana: {v.median_latency_us:.2f} us{speedup_info})")
-                for r in v.reasons:
-                    print(f"    - {r}")
-                if v.verdict != "SHIP":
-                    all_ship = False
-            print("-" * 60)
-            print(f"EVALUACION FINAL DE RENDIMIENTO: {'SHIP' if all_ship else 'NO_SHIP'}")
-            if not all_ship:
+            from core.compiler.benchmark import get_standard_benchmarks, format_benchmark_report
+            suites = get_standard_benchmarks(args.suite)
+            print("\n" + format_benchmark_report(suites))
+            if any(v.verdict != "SHIP" for v in suites):
                 sys.exit(1)
         else:
             parser.print_help()

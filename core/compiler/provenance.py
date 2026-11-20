@@ -13,16 +13,33 @@ from typing import Dict, Any, Optional, List, Tuple
 HARMOS_VERSION = "0.2.0"
 
 
-def compute_file_sha256(filepath: Path | str) -> str:
-    """Calcula el hash SHA-256 de un archivo en modo binario."""
+TEXT_EXTENSIONS = {
+    ".json", ".maxpat", ".cpp", ".hpp", ".h", ".c", ".txt", ".cmake",
+    ".py", ".md", ".xml", ".sc", ".scd", ".yml", ".yaml"
+}
+
+
+def compute_file_sha256(filepath: Path | str, normalize_newlines: bool = True) -> str:
+    """
+    Calcula el hash SHA-256 de un archivo en modo binario.
+    Si el archivo es de texto (o extensión de texto conocida) y normalize_newlines=True,
+    normaliza los saltos de línea (CRLF -> LF) para asegurar determinismo multiplataforma.
+    """
     p = Path(filepath)
     if not p.is_file():
         raise FileNotFoundError(f"Archivo no encontrado para computar hash: {filepath}")
 
     hasher = hashlib.sha256()
-    with open(p, "rb") as f:
-        while chunk := f.read(65536):
-            hasher.update(chunk)
+    is_text = p.suffix.lower() in TEXT_EXTENSIONS or p.name == "CMakeLists.txt"
+    if normalize_newlines and is_text:
+        with open(p, "rb") as f:
+            data = f.read()
+        normalized = data.replace(b"\r\n", b"\n")
+        hasher.update(normalized)
+    else:
+        with open(p, "rb") as f:
+            while chunk := f.read(65536):
+                hasher.update(chunk)
     return hasher.hexdigest()
 
 
