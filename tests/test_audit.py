@@ -372,5 +372,158 @@ class TestProvenanceGate(LogFixtureMixin, unittest.TestCase):
         self.assertEqual(1, ctx.exception.code)
 
 
+class TestContractGate(unittest.TestCase):
+    """
+    La puerta estatica de contratos debe rechazar cables que max_contracts.json
+    declara ilegales, sin arrancar Max y sin hardcodear indices de inlet/outlet.
+    """
+
+    def _write_patcher(self, boxes, lines, name="gate.maxpat"):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / name
+        path.write_text(
+            json.dumps({"patcher": {"boxes": boxes, "lines": lines}}), encoding="utf-8"
+        )
+        return path
+
+    @staticmethod
+    def _box(box_id, text, maxclass="newobj"):
+        return {"box": {"id": box_id, "maxclass": maxclass, "text": text}}
+
+    @staticmethod
+    def _line(src_id, src_outlet, dest_id, dest_inlet):
+        return {
+            "patchline": {
+                "source": [src_id, src_outlet],
+                "destination": [dest_id, dest_inlet],
+            }
+        }
+
+    def test_signal_outlet_into_control_inlet_is_rejected(self):
+        patcher = self._write_patcher(
+            [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "mtof")],
+            [self._line("obj-1", 0, "obj-2", 0)],
+        )
+
+        violations, checked = audit.audit_contracts(patcher)
+
+        self.assertEqual(1, checked)
+        self.assertEqual(1, len(violations))
+        self.assertTrue(any("inlet de control" in v for v in violations), violations)
+
+    def test_connection_into_comment_box_is_rejected(self):
+        patcher = self._write_patcher(
+            [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "comment nota", "comment")],
+            [self._line("obj-1", 0, "obj-2", 0)],
+        )
+
+        violations, _ = audit.audit_contracts(patcher)
+
+        self.assertEqual(1, len(violations))
+        self.assertTrue(any("comment" in v for v in violations), violations)
+
+    def test_objects_without_contract_are_permissive(self):
+        """Sin contrato explicito no hay violacion: la puerta no inventa reglas."""
+        patcher = self._write_patcher(
+            [self._box("obj-1", "harmos.custom~ 1"), self._box("obj-2", "otro.custom 2")],
+            [self._line("obj-1", 0, "obj-2", 0)],
+        )
+
+        violations, checked = audit.audit_contracts(patcher)
+
+        self.assertEqual(1, checked)
+        self.assertEqual([], violations)
+
+    def test_valid_signal_chain_has_no_violations(self):
+        patcher = self._write_patcher(
+            [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "gain~"), self._box("obj-3", "ezdac~")],
+            [self._line("obj-1", 0, "obj-2", 0), self._line("obj-2", 0, "obj-3", 0)],
+        )
+
+        violations, checked = audit.audit_contracts(patcher)
+
+        self.assertEqual(2, checked)
+        self.assertEqual([], violations)
+
+    def test_subpatcher_connections_are_validated(self):
+        subpatcher = {
+            "patcher": {
+                "boxes": [self._box("obj-1", "cycle~ 220"), self._box("obj-2", "mtof")],
+                "lines": [self._line("obj-1", 0, "obj-2", 0)],
+            }
+        }
+        parent = {"box": {"id": "obj-9", "maxclass": "newobj", "text": "p voz"}}
+        parent["box"]["patcher"] = subpatcher["patcher"]
+
+        patcher = self._write_patcher([parent], [])
+
+        violations, checked = audit.audit_contracts(patcher)
+
+        self.assertEqual(1, checked)
+        self.assertEqual(1, len(violations))
+
+    def test_document_without_patcher_container_is_not_applicable(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "sin_contenedor.maxpat"
+        path.write_text("{}", encoding="utf-8")
+
+        violations, checked = audit.audit_contracts(path)
+
+        self.assertIsNone(violations)
+        self.assertEqual(0, checked)
+
+    def test_unparseable_patcher_raises_document_error(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "roto.maxpat"
+        path.write_text("{ esto no es json", encoding="utf-8")
+
+        with self.assertRaises(audit.PatcherDocumentError):
+            audit.audit_contracts(path)
+
+    def test_illegal_connection_fails_before_launching_max(self):
+        patcher = self._write_patcher(
+            [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "mtof")],
+            [self._line("obj-1", 0, "obj-2", 0)],
+        )
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=Path("Max.exe")), \
+                mock.patch.object(
+                    audit.subprocess, "Popen",
+                    side_effect=AssertionError("Max.exe no debe lanzarse con contratos ilegales"),
+                ):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=1)
+
+        self.assertEqual("FAIL", verdict)
+        self.assertTrue(any("Contratos rechazados" in d for d in details), details)
+
+    def test_pass_detail_declares_validated_connections(self):
+        patcher = self._write_patcher(
+            [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "gain~")],
+            [self._line("obj-1", 0, "obj-2", 0)],
+        )
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        log = Path(tmp.name) / "Max.log"
+        log.write_text("\n".join(_session()) + "\n", encoding="utf-8")
+        launched = datetime.now().timestamp() - 5
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=Path("Max.exe")), \
+                mock.patch.object(audit, "resolve_max_log_path", return_value=log), \
+                mock.patch.object(audit, "SETTLE_SECONDS", 0.01), \
+                mock.patch.object(
+                    audit.subprocess, "Popen",
+                    side_effect=lambda *a, **k: FakeProc(log, None),
+                ):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=3)
+
+        self.assertEqual("PASS", verdict)
+        self.assertTrue(
+            any("Contratos verificados: 1 conexiones" in d for d in details), details
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

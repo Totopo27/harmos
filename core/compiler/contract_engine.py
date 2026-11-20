@@ -29,8 +29,16 @@ class ContractEngine:
                 data = json.load(f)
                 self._contracts = data.get("objects", {})
 
+    @staticmethod
+    def _base_name(obj_name: str) -> str:
+        """Nombre base de un objeto Max (primer token); cadena vacia si no hay token."""
+        tokens = str(obj_name).strip().split()
+        return tokens[0] if tokens else ""
+
     def get_object_contract(self, obj_name: str) -> Optional[Dict[str, Any]]:
-        base_name = obj_name.strip().split()[0]
+        base_name = self._base_name(obj_name)
+        if not base_name:
+            return None
         return self._contracts.get(base_name)
 
     def _normalize_ports(self, ports_data: Union[Dict[str, Any], List[Any]]) -> List[Dict[str, Any]]:
@@ -81,7 +89,7 @@ class ContractEngine:
                 return idx
 
         # 2. Heurística canónica de fallback para objetos estándar de Max
-        base_name = obj_name.strip().split()[0]
+        base_name = self._base_name(obj_name)
         if base_name == "midiformat":
             mapping = {
                 "pitch": 0,
@@ -103,8 +111,8 @@ class ContractEngine:
         return 0
 
     def is_valid_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> Tuple[bool, str]:
-        src_base = src_obj.strip().split()[0]
-        dest_base = dest_obj.strip().split()[0]
+        src_base = self._base_name(src_obj)
+        dest_base = self._base_name(dest_obj)
 
         # Regla 1: Prohibición absoluta de conexiones a comment
         if dest_base == "comment":

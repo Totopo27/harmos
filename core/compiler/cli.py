@@ -336,7 +336,6 @@ def main():
     compile_parser.add_argument("--out", default="./build_harmos", help="Directorio destino de generación")
     compile_parser.add_argument("--source", default=None, help="Ruta al código fuente original (opcional para procedencia)")
     compile_parser.add_argument("--no-build", action="store_true", default=False, help="Emitir solo archivos fuente sin compilar el binario nativo")
-    compile_parser.add_argument("--build", dest="force_build", action="store_true", default=False, help="Compilar el external nativo (.mxe64)")
 
     # Subcomando extract
     extract_parser = subparsers.add_parser("extract", help="Extraer una especificación IR desde código fuente (TypeScript/JS)")

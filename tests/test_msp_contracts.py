@@ -101,5 +101,27 @@ class TestMSPContractEngine(unittest.TestCase):
         self.assertGreaterEqual(len(poly_outlets), 1)
 
 
+class TestContractEngineRobustness(unittest.TestCase):
+    """Regresion: un objeto sin texto no declara contrato y no debe reventar el motor."""
+
+    def setUp(self):
+        self.engine = ContractEngine()
+
+    def test_empty_object_name_has_no_contract(self):
+        self.assertIsNone(self.engine.get_object_contract(""))
+        self.assertIsNone(self.engine.get_object_contract("   "))
+        self.assertEqual([], self.engine.get_inlets(""))
+        self.assertEqual([], self.engine.get_outlets(""))
+
+    def test_connection_with_empty_object_name_is_permissive(self):
+        valid, reason = self.engine.is_valid_connection("", 0, "mtof", 0)
+        self.assertTrue(valid, reason)
+        valid, reason = self.engine.is_valid_connection("cycle~ 440", 0, "", 0)
+        self.assertTrue(valid, reason)
+
+    def test_resolve_inlet_index_without_text_falls_back_to_zero(self):
+        self.assertEqual(0, self.engine.resolve_inlet_index("", "pitch"))
+
+
 if __name__ == "__main__":
     unittest.main()
