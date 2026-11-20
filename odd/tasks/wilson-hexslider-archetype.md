@@ -15,9 +15,10 @@ aplicado a la superficie microtonal hexagonal 2D (wilson.hexslider).
 
 - [x] T1 (S2) [inline]: Registrar contratos de `kslider` y `wilson.hexslider` en `core/schema/max_contracts.json` con pruebas unitarias en `tests/test_typed_patch.py`. Commit: d9e82c7
 - [x] T2 (S3, S4) [inline]: Desacoplar `wilson_hexslider_kernel.hpp` con cálculo analítico de frecuencias y hit-testing euclidiano, e integrarlo en `wilson.hexslider.cpp`. Commit: 723a3b4
-- [x] T3 (S5) [inline]: Implementar cosecha y diff semántico headless para `wilson_hexslider_kernel.hpp` con tests unitarios. Commit: pending
-- [ ] T4 (S6) [inline]: Ejecutar Live Runtime Audit en Max 9 y verificar guardrail integral (`scripts/check.py`). Commit: pending
+- [x] T3 (S5) [inline]: Implementar cosecha y diff semántico headless para `wilson_hexslider_kernel.hpp` con tests unitarios. Commit: dc62a66
+- [x] T4 (S6) [inline]: Ejecutar Live Runtime Audit en Max 9 y verificar guardrail integral (`scripts/check.py`). Commit: 5d22875
 
 ## Log
 
 - L1: "Adelante con eso" — Inicio de Fase 5: Benchmark 2 (wilson.hexslider) tras completar la Fase 3 de CI.
+- L2: Live Max 9 runtime audit PASS (test_wilson_suite.maxpat) y guardrail scripts/check.py PASS (100% tests, schemas válidos, 0 leaks de privacidad).
