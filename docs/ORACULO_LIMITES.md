@@ -21,8 +21,9 @@ Cuando `scripts/audit.py` emite un veredicto `PASS`, garantiza de forma verifica
 1. **Validez Estricta de Contratos**: Todos los patchcords cumplen con los tipos de inlets y outlets definidos en `core/schema/max_contracts.json`. No existen cables a etiquetas `comment` ni índices erróneos en objetos sensibles (ej. `midiformat`).
 2. **Conformidad de Esquema**: La Representación Intermedia (`.ir.json`) cumple al 100% con `core/schema/max_object_ir.schema.json`.
 3. **Carga Limpia en Tiempo Real**: Una instancia real de `Max.exe` cargó el parche `.maxpat` y la consola interna (`Max.log`) no registró advertencias de tipo (`doesn't match type`), objetos inexistentes (`no such object`) ni violaciones de acceso (`fatal: access violation`).
+4. **Procedencia Inmutable**: Si existe `emitted-from.json` junto al patcher, el audit lo verifica **antes** de arrancar Max y solo emite `PASS` cuando el veredicto de procedencia es `VALID`: el parche corresponde a la versión de los contratos con la que fue emitido (`core.compiler.provenance`) y los artefactos emitidos (`.maxpat`, `.cpp`, `CMakeLists.txt`) coinciden byte a byte con las huellas SHA-256 registradas. Cualquier otro veredicto (`STALE_CONTRACTS`, `STALE_IR`, `STALE_SOURCE`, `STALE_ARTIFACTS`, `UNVERIFIABLE`, `INVALID`) se emite como veredicto propio del audit con código de salida distinto de cero, sin llegar a arrancar el paquete en Max. Si no existe huella, el audit no certifica procedencia y el `PASS` lo declara explícitamente en el detalle.
 
-**La procedencia no forma parte de esa garantía.** `scripts/audit.py` no invoca la verificación de procedencia, por lo que un `PASS` del audit **no implica** que `emitted-from.json` haya sido verificado. La procedencia se certifica únicamente ejecutando `python -m core.compiler.cli verify-provenance <dir>`, que comprueba que el parche corresponde a la versión de los contratos con la que fue emitido (`core.compiler.provenance`) y que los artefactos emitidos (`.maxpat`, `.cpp`, `CMakeLists.txt`) coinciden byte a byte con las huellas SHA-256 registradas. Si la evidencia no puede leerse, ese veredicto es `UNVERIFIABLE` y nunca `VALID`; un registro sin huella de artefactos (formato previo) certifica solo los insumos y lo declara explícitamente en el detalle. En consecuencia, un parche estructuralmente legal puede haber sido emitido contra contratos ya obsoletos, y solo la verificación de procedencia lo detecta.
+En consecuencia, un parche estructuralmente legal pero emitido contra contratos ya obsoletos **no** obtiene `PASS`: recibe `STALE_CONTRACTS` y debe recompilarse. La procedencia también puede verificarse de forma aislada con `python -m core.compiler.cli verify-provenance <dir>`.
 
 ---
 
@@ -41,7 +42,7 @@ Un veredicto `PASS` **nunca debe interpretarse como prueba de equivalencia algor
 
 | Veredicto | Significado Técnico | Acción del Operador o Agente |
 | :--- | :--- | :--- |
-| **`PASS`** | Patcher estructuralmente legal, compilación exitosa y cero líneas rojas en `Max.log`. | Proceder a empaquetado o pruebas auditivas manuales. |
+| **`PASS`** | Patcher estructuralmente legal, compilación exitosa y cero líneas rojas en `Max.log`. Si el paquete incluye `emitted-from.json`, además la procedencia quedó en `VALID`. | Proceder a empaquetado o pruebas auditivas manuales. |
 | **`FAIL`** | Error en tiempo de compilación, patchcord incompatible o advertencia en `Max.log`. | Bloqueo estricto. Auto-corrección requerida antes de reintentar. |
 | **`BLOCKED (RUNTIME_UNAVAILABLE)`** | `Max.exe` no está instalado o no se detectó en el host. | Prohibido certificar. Se requiere entorno con Cycling '74 Max. |
 | **`STALE_CONTRACTS`** | `max_contracts.json` cambió tras la emisión del parche (`verify-provenance`). | Recompilar el parche a partir del IR para actualizar índices y tipos. |

@@ -388,7 +388,19 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
             "Sin sesion propia no hay telemetria verificable: prohibido emitir PASS.",
         ]
 
-    return evaluate_session(session_lines)
+    verdict, details = evaluate_session(session_lines)
+
+    if prov_verdict == "VALID":
+        details.append(
+            "Procedencia verificada: emitted-from.json certifica los contratos y la "
+            "integridad de los artefactos emitidos."
+        )
+    elif prov_verdict is None:
+        details.append(
+            f"Sin {PROVENANCE_RECORD_NAME} junto al patcher: la procedencia no fue certificada."
+        )
+
+    return verdict, details
 
 
 def main():
