@@ -9,6 +9,20 @@ from pathlib import Path
 from core.compiler.sc_control_extractor import SCControlExtractor
 
 
+SAMPLE_TUNINGS_SCD = """
+(
+scales[\\tet31] = self.build31TET;
+scales[\\tet41] = self.build41TET;
+scales[\\tet53] = self.build53TET;
+scales[\\tet12] = self.build12TET;
+scales[\\meantone31] = self.buildMeantone31;
+scales[\\magic41] = self.buildMagic41;
+scales[\\partch] = self.buildPartch;
+scales[\\centaur] = self.buildCentaur;
+)
+"""
+
+
 class TestSCControlExtractor(unittest.TestCase):
     def setUp(self):
         self.extractor = SCControlExtractor()
@@ -17,11 +31,11 @@ class TestSCControlExtractor(unittest.TestCase):
 
     def test_extract_scales_and_methods_from_tunings_code(self):
         """Verifica la detección automática de todas las escalas definidas en tunings.scd."""
-        if not self.tunings_path or not self.tunings_path.exists():
-            self.skipTest("Defina SCMICROSYNTH_ROOT apuntando al proyecto SCMicroSynth.")
-
-        with open(self.tunings_path, "r", encoding="utf-8") as f:
-            code = f.read()
+        if self.tunings_path and self.tunings_path.exists():
+            with open(self.tunings_path, "r", encoding="utf-8") as f:
+                code = f.read()
+        else:
+            code = SAMPLE_TUNINGS_SCD
 
         control_ir = self.extractor.extract(code, module_name="tuningsModule")
 

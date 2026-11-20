@@ -4,19 +4,26 @@ Convierte especificaciones de sclang a Representación Intermedia conforme a max
 """
 import re
 from typing import Dict, Any, List, Optional
+from core.compiler.sc_control_extractor import SCControlExtractor
 
 
 class SCAstExtractor:
     def __init__(self):
-        pass
+        self.control_extractor = SCControlExtractor()
 
     def extract(self, source_code: str, default_name: str = "harmos_synth") -> Dict[str, Any]:
         """
-        Extrae la Representación Intermedia (IR) desde código SuperCollider que define SynthDefs.
+        Extrae la Representación Intermedia (IR) desde código SuperCollider que define SynthDefs
+        y/o módulos de control y tablas de afinación.
         """
         # 1. Extraer nombre del SynthDef (\name o "name")
         name_match = re.search(r"SynthDef\s*\(\s*[\\'\"]?(\w+)[\\'\"]?", source_code)
         synth_name = name_match.group(1) if name_match else default_name
+
+        # Extraer tablas y conmutadores de control si están presentes
+        control_ir = self.control_extractor.extract(source_code, module_name=synth_name)
+        data_tables = control_ir.get("data_tables", [])
+        control_interfaces = control_ir.get("control_interfaces", [])
 
         # 2. Extraer argumentos (arg out = 0, freq = 440, ...;)
         inlets: List[Dict[str, Any]] = []
@@ -71,8 +78,8 @@ class SCAstExtractor:
 
         # 4. Outlets: si hay Out.ar o SynthDef de audio, exponer señal estéreo/mono
         outlets: List[Dict[str, Any]] = []
-        has_audio = any(u["rate"] == "audio" for u in ugens)
-        if has_audio or "Out.ar" in source_code:
+        has_audio = any(u["rate"] == "audio" for u in ugens) or "Out.ar" in source_code
+        if has_audio:
             outlets.append({
                 "id": 0,
                 "type": "signal",
@@ -83,12 +90,30 @@ class SCAstExtractor:
                 "type": "signal",
                 "description": "Right Audio Signal"
             })
+        else:
+            outlets.append({
+                "id": 0,
+                "type": "anything",
+                "description": "Control output"
+            })
 
-        return {
+        if not inlets:
+            inlets.append({
+                "id": 0,
+                "type": "anything",
+                "description": "Default control inlet"
+            })
+
+        category = "dsp" if has_audio else "control"
+
+        result = {
+            "object_name": synth_name,
             "name": synth_name,
             "version": "1.0.0",
-            "category": "dsp" if has_audio else "control",
-            "description": f"Generado por Harmos SCAstExtractor a partir de SynthDef \\{synth_name}",
+            "category": category,
+            "target_runtime": "cpp_min_devkit",
+            "thread_safety": "audio_dsp_perform" if has_audio else "main_thread_only",
+            "description": f"Generado por Harmos SCAstExtractor a partir de fuente SuperCollider \\{synth_name}",
             "inlets": inlets,
             "outlets": outlets,
             "attributes": attributes,
@@ -98,6 +123,13 @@ class SCAstExtractor:
                 "ugens": ugens
             }
         }
+
+        if data_tables:
+            result["data_tables"] = data_tables
+        if control_interfaces:
+            result["control_interfaces"] = control_interfaces
+
+        return result
 
     def _is_number(self, s: str) -> bool:
         try:
