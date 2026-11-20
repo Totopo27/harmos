@@ -25,6 +25,9 @@ FORBIDDEN_PATTERNS = [
 # Extensiones prohibidas de scripts de host en el repo canonico
 BANNED_EXTENSIONS = [".ps1", ".bat", ".cmd"]
 
+# Extensiones de texto analizadas contra fugas y PII
+SCANNED_EXTENSIONS = [".md", ".py", ".json", ".cpp", ".hpp", ".txt", ".cmake", ".yml", ".yaml"]
+
 
 def run_unit_tests() -> bool:
     print("[1/3] Ejecutando suite de tests unitarios...")
@@ -79,7 +82,7 @@ def scan_for_leaks_and_pii() -> bool:
             has_leaks = True
 
         # 2. Chequeo de contenido en archivos de texto
-        if path_obj.suffix.lower() in [".md", ".py", ".json", ".cpp", ".hpp", ".txt", ".cmake"]:
+        if path_obj.suffix.lower() in SCANNED_EXTENSIONS:
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     for line_num, line in enumerate(f, start=1):

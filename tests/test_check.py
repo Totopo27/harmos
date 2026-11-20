@@ -9,7 +9,7 @@ no contenga rutas literales que el guardrail deba rechazar.
 import re
 import unittest
 
-from scripts.check import FORBIDDEN_PATTERNS
+from scripts.check import FORBIDDEN_PATTERNS, SCANNED_EXTENSIONS
 
 BACKSLASH = "\\"
 FORWARD_SLASH = "/"
@@ -42,6 +42,10 @@ class TestForbiddenPatterns(unittest.TestCase):
 
     def test_ignores_json_schema_uri(self):
         self.assertEqual(_matches('"$schema": "http://json-schema.org/draft-07/schema#"'), [])
+
+    def test_scanned_extensions_include_yaml(self):
+        self.assertIn(".yml", SCANNED_EXTENSIONS)
+        self.assertIn(".yaml", SCANNED_EXTENSIONS)
 
 
 if __name__ == "__main__":
