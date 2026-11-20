@@ -11,6 +11,11 @@ from typing import Dict, Any
 
 from core.compiler.typed_patch import TypedPatch
 from core.compiler.ast_extractor import extract_ir_from_file
+from core.compiler.provenance import (
+    build_provenance_record,
+    write_provenance_file,
+    verify_provenance
+)
 
 
 def handle_extract(source_file: str, output_path: str, object_name: str = None) -> Dict[str, Any]:
@@ -139,7 +144,7 @@ def generate_test_maxpat(ir: Dict[str, Any], output_path: str) -> None:
     patch.save(output_path)
 
 
-def compile_ir(ir_file_path: str, output_dir: str) -> Dict[str, Any]:
+def compile_ir(ir_file_path: str, output_dir: str, source_path: Optional[str] = None) -> Dict[str, Any]:
     with open(ir_file_path, "r", encoding="utf-8") as f:
         ir_data = json.load(f)
 
@@ -154,12 +159,17 @@ def compile_ir(ir_file_path: str, output_dir: str) -> Dict[str, Any]:
     generate_cpp_min_devkit(ir_data, cpp_path)
     generate_cmakelists(object_name, cmake_path)
 
+    # Generar huella de procedencia criptográfica (emitted-from.json)
+    prov_record = build_provenance_record(ir_file_path, source_path=source_path)
+    prov_path = write_provenance_file(output_dir, prov_record)
+
     return {
         "success": True,
         "object_name": object_name,
         "maxpat_path": maxpat_path,
         "cpp_path": cpp_path,
-        "cmake_path": cmake_path
+        "cmake_path": cmake_path,
+        "provenance_path": str(prov_path)
     }
 
 
@@ -171,6 +181,7 @@ def main():
     compile_parser = subparsers.add_parser("compile", help="Compilar un archivo IR (.ir.json) a C++ y .maxpat")
     compile_parser.add_argument("ir_file", help="Ruta al archivo de especificación IR (.ir.json)")
     compile_parser.add_argument("--out", default="./build_harmos", help="Directorio destino de generación")
+    compile_parser.add_argument("--source", default=None, help="Ruta al código fuente original (opcional para procedencia)")
 
     # Subcomando extract
     extract_parser = subparsers.add_parser("extract", help="Extraer una especificación IR desde código fuente (TypeScript/JS)")
@@ -178,23 +189,37 @@ def main():
     extract_parser.add_argument("--out", required=True, help="Ruta del archivo IR destino (.ir.json)")
     extract_parser.add_argument("--name", default=None, help="Nombre del objeto en Max (ej. harmos.gain_meter)")
 
+    # Subcomando verify-provenance
+    verify_prov_parser = subparsers.add_parser("verify-provenance", help="Verificar la validez de la huella emitted-from.json")
+    verify_prov_parser.add_argument("path", help="Ruta al archivo emitted-from.json o al directorio generado")
+    verify_prov_parser.add_argument("--ir", default=None, help="Ruta al archivo IR actual (opcional)")
+    verify_prov_parser.add_argument("--source", default=None, help="Ruta al código fuente actual (opcional)")
+
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
-    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "-h", "--help"]:
         sys.argv.insert(1, "compile")
 
     args = parser.parse_args()
 
     try:
         if args.command == "compile":
-            res = compile_ir(args.ir_file, args.out)
+            res = compile_ir(args.ir_file, args.out, source_path=args.source)
             print(f"Compilacion exitosa para: {res['object_name']}")
             print(f"  Patcher de prueba: {res['maxpat_path']}")
             print(f"  Fuente C++:        {res['cpp_path']}")
             print(f"  CMakeLists:        {res['cmake_path']}")
+            print(f"  Procedencia:       {res['provenance_path']}")
         elif args.command == "extract":
             res = handle_extract(args.source_file, args.out, object_name=args.name)
             print(f"Extraccion exitosa para: {res['object_name']}")
             print(f"  Archivo IR generado: {res['ir_path']}")
+        elif args.command == "verify-provenance":
+            verdict, details = verify_provenance(args.path, current_ir_path=args.ir, current_source_path=args.source)
+            print(f"\nHARMOS PROVENANCE: {verdict}")
+            for d in details:
+                print(f"  {d}")
+            if verdict != "VALID":
+                sys.exit(1)
         else:
             parser.print_help()
     except Exception as e:

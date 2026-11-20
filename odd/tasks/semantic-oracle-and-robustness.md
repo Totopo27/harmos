@@ -13,8 +13,8 @@ Seguimiento ODD de tareas por commits unitarios atómicos.
 
 ## Tasks
 
-- [ ] T1 (S2) [inline]: Sanear `scripts/audit.py` (sondeo reactivo, lectura binaria `"rb"`, marcador centinela) y tests de auditoría. Commit: pending
-- [ ] T2 (S3) [inline]: Implementar módulo de procedencia `emitted-from.json` y verificación en CLI. Commit: pending
+- [x] T1 (S2) [inline]: Sanear `scripts/audit.py` (sondeo reactivo, lectura binaria `"rb"`, marcador centinela) y tests de auditoría. Commit: 75f9fe3
+- [x] T2 (S3) [inline]: Implementar módulo de procedencia `emitted-from.json` y verificación en CLI. Commit: pending
 - [ ] T3 (S4) [inline]: Redactar declaración formal de límites del oráculo y honestidad epistémica (I11). Commit: pending
 - [ ] T4 (S5) [inline]: Implementar veredictos explícitos en benchmarks (I6). Commit: pending
 - [ ] T5 (S6) [inline]: Refactorizar emisión C++ desacoplando Kernel Puro y Binding Min-Devkit. Commit: pending
