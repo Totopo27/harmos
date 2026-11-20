@@ -30,7 +30,7 @@ import argparse
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 
 # El script se ejecuta como `python scripts/audit.py`: la raiz del repo debe estar
 # en sys.path para importar el motor de procedencia.
