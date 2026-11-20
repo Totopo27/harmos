@@ -9,8 +9,8 @@ Este documento establece formalmente los límites epistémicos y técnicos del s
 En entornos de flujo de datos y DSP en tiempo real como Cycling '74 Max MSP, el fallo silencioso es la norma: un objeto que calcula incorrectamente una frecuencia o satura una tabla armónica **no genera líneas rojas en la consola de Max**. 
 
 Por ello, la certificación de Harmos se divide formalmente en dos capas:
-1. **Oráculo Estructural (En producción hoy)**: Certifica que el artefacto está correctamente construido, que sus conexiones son válidas y que carga en Max sin errores de runtime.
-2. **Oráculo Semántico (Fase 2 del roadmap)**: Certifica que el objeto compilado computa los mismos valores que el algoritmo original sobre casos de prueba grabados (`cases.jsonl`).
+1. **Oráculo Estructural (`scripts/audit.py`)**: Certifica que el artefacto está correctamente construido, que sus conexiones son válidas y que carga en Max sin errores de runtime.
+2. **Oráculo Semántico (`core/compiler/oracle_diff.py`)**: Certifica que el objeto compilado computa los mismos valores que el algoritmo original sobre casos de prueba grabados (`cases.jsonl`) con tolerancia escalar.
 
 ---
 
@@ -51,6 +51,12 @@ Un veredicto `PASS` **nunca debe interpretarse como prueba de equivalencia algor
 | **`STALE_ARTIFACTS`** | Un artefacto emitido (`.maxpat`, `.cpp`, `CMakeLists.txt`) difiere de la huella SHA-256 registrada. | Bloqueo estricto. Recompilar y descartar el parche alterado. |
 | **`UNVERIFIABLE`** | La evidencia necesaria no existe o no puede leerse (contratos ilegibles, artefacto registrado ausente, huella no registrada). | Prohibido certificar. Restituir la evidencia y re-verificar; nunca se degrada a `VALID`. |
 | **`INVALID`** | `emitted-from.json` no existe, no es JSON parseable, o su estructura es malformada (raíz o secciones que no son objetos). | Prohibido certificar. Regenerar el paquete. |
+
+### Veredictos del Oráculo Semántico (`diff`)
+
+El comando `python -m core.compiler.cli diff` evalúa la equivalencia funcional de cálculo contra casos grabados (`cases.jsonl`) y emite:
+- **`PASS (SEMANTICO)`**: El kernel computa los mismos valores que el oráculo sobre `cases.jsonl` dentro de la tolerancia numérica declarada.
+- **`FAIL (MISMATCH)`**: Discrepancia numérica superior a la tolerancia o ruta de error divergente al evaluar `cases.jsonl`.
 
 ### Evaluación de Rendimiento en Python (`bench`) vs. Oráculo de Verificación
 

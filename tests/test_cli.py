@@ -130,6 +130,33 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertTrue(os.path.exists(res["external_path"]))
         self.assertTrue(res["external_path"].endswith(".mxe64"))
 
+    def test_cli_harvest_and_diff_subcommands_end_to_end(self):
+        cases_file = os.path.join(self.temp_dir, "cases.jsonl")
+        
+        # 1. Ejecutar harvest Truax
+        import subprocess
+        import sys
+        harvest_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "harvest",
+            "--suite", "truax",
+            "--out", cases_file
+        ]
+        res_harvest = subprocess.run(harvest_cmd, capture_output=True, text=True)
+        self.assertEqual(res_harvest.returncode, 0, f"harvest failed: {res_harvest.stderr}")
+        self.assertTrue(os.path.exists(cases_file))
+        self.assertIn("Cosecha exitosa", res_harvest.stdout)
+
+        # 2. Ejecutar diff contra la misma suite (debe pasar con PASS)
+        diff_cmd = [
+            sys.executable, "-m", "core.compiler.cli", "diff",
+            cases_file,
+            "--suite", "truax"
+        ]
+        res_diff = subprocess.run(diff_cmd, capture_output=True, text=True)
+        self.assertEqual(res_diff.returncode, 0, f"diff failed: {res_diff.stderr}")
+        self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_diff.stdout)
+
+
 
 
 if __name__ == "__main__":

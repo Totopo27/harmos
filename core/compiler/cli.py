@@ -14,6 +14,13 @@ from typing import Dict, Any, Optional
 from core.compiler.typed_patch import TypedPatch
 from core.compiler.ast_extractor import extract_ir_from_file
 from core.compiler.cpp_generator import generate_cpp_kernel, generate_min_wrapper
+from core.compiler.oracle_harvest import (
+    TestCase,
+    write_cases_jsonl,
+    read_cases_jsonl,
+    harvest_from_callable
+)
+from core.compiler.oracle_diff import evaluate_diff
 from core.compiler.provenance import (
     build_provenance_record,
     write_provenance_file,
@@ -347,8 +354,19 @@ def main():
     bench_parser = subparsers.add_parser("bench", help="Evaluar presupuestos de rendimiento en tiempo real (SHIP / NO_SHIP)")
     bench_parser.add_argument("--suite", choices=["truax", "tables", "all"], default="all", help="Suite a evaluar")
 
+    # Subcomando harvest
+    harvest_parser = subparsers.add_parser("harvest", help="Cosechar vectores de prueba semanticos hacia cases.jsonl")
+    harvest_parser.add_argument("--suite", choices=["truax", "wilson"], default="truax", help="Suite estandar a cosechar")
+    harvest_parser.add_argument("--out", required=True, help="Ruta del archivo destino (cases.jsonl)")
+    harvest_parser.add_argument("--tolerance", type=float, default=1e-7, help="Tolerancia numerica float")
+
+    # Subcomando diff
+    diff_parser = subparsers.add_parser("diff", help="Evaluar equivalencia semantica de cases.jsonl contra un target")
+    diff_parser.add_argument("cases", help="Ruta al archivo cases.jsonl")
+    diff_parser.add_argument("--suite", choices=["truax", "wilson"], default="truax", help="Registro objetivo a evaluar")
+
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
-    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "harvest", "diff", "-h", "--help"]:
         sys.argv.insert(1, "compile")
 
     args = parser.parse_args()
@@ -380,6 +398,65 @@ def main():
             suites = get_standard_benchmarks(args.suite)
             print("\n" + format_benchmark_report(suites))
             if any(v.verdict != "SHIP" for v in suites):
+                sys.exit(1)
+        elif args.command == "harvest":
+            cases = []
+            if args.suite == "truax":
+                from core.compiler.microtonal_engine import MicrotonalEngine
+                eng = MicrotonalEngine()
+                truax_inputs = [
+                    [1.0, 1.0], [1.0, 2.0], [3.0, 2.0], [5.0, 3.0], [7.0, 4.0], [9.0, 5.0]
+                ]
+                cases.extend(harvest_from_callable(eng.to_normal_form, "to_normal_form", truax_inputs, tolerance=args.tolerance))
+                carrier_inputs = [
+                    [220.0, 1.0, 1.0], [220.0, 3.0, 2.0], [440.0, 5.0, 3.0]
+                ]
+                cases.extend(harvest_from_callable(eng.calc_carrier_freq, "calc_carrier_freq", carrier_inputs, tolerance=args.tolerance))
+            elif args.suite == "wilson":
+                def wilson_reduce_to_octave(ratio: float) -> float:
+                    if ratio <= 0.0:
+                        return 1.0
+                    while ratio >= 2.0:
+                        ratio /= 2.0
+                    while ratio < 1.0:
+                        ratio *= 2.0
+                    return ratio
+                w_inputs = [[0.5], [1.0], [1.5], [2.0], [3.0], [5.0], [7.0]]
+                cases.extend(harvest_from_callable(wilson_reduce_to_octave, "reduce_to_octave", w_inputs, tolerance=args.tolerance))
+
+            count = write_cases_jsonl(cases, args.out)
+            print(f"Cosecha exitosa: {count} casos guardados en '{args.out}'.")
+        elif args.command == "diff":
+            cases = read_cases_jsonl(args.cases)
+            registry = {}
+            if args.suite == "truax":
+                from core.compiler.microtonal_engine import MicrotonalEngine
+                eng = MicrotonalEngine()
+                registry["to_normal_form"] = eng.to_normal_form
+                registry["calc_carrier_freq"] = eng.calc_carrier_freq
+            elif args.suite == "wilson":
+                def wilson_reduce_to_octave(ratio: float) -> float:
+                    if ratio <= 0.0:
+                        return 1.0
+                    while ratio >= 2.0:
+                        ratio /= 2.0
+                    while ratio < 1.0:
+                        ratio *= 2.0
+                    return ratio
+                registry["reduce_to_octave"] = wilson_reduce_to_octave
+
+            report = evaluate_diff(cases, registry)
+            print("\n" + "=" * 50)
+            print(f" HARMOS ORACLE DIFF: {report.verdict} (SEMANTIC)")
+            print("=" * 50)
+            for d in report.details:
+                print(f"  {d}")
+            if report.failures:
+                print("\n  Fallas detectadas:")
+                for f in report.failures[:10]:
+                    print(f"    - {f.case.fn}{tuple(f.case.args)}: {f.reason}")
+            print("-" * 50)
+            if report.verdict != "PASS":
                 sys.exit(1)
         else:
             parser.print_help()
