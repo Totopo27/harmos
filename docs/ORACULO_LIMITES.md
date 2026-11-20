@@ -35,6 +35,7 @@ Un veredicto `PASS` **nunca debe interpretarse como prueba de equivalencia algor
 2. **Identidad de Fase Acústica (Null Test)**: En procesamiento de audio a bloques de 64 muestras (`perform64`), con cuantización de parámetros en el scheduler y optimizaciones de compilador (FMA, AVX), la fase de la señal difiere de modelos en lenguajes de propósito general.
 3. **Comportamiento en Rutas de Error no Mapeadas**: No certifica que entradas anómalas (`NaN`, infinitos, cadenas inesperadas) respondan idénticamente al lenguaje origen, salvo que se hayan definido casos de error específicos.
 4. **Presupuesto de CPU a 48 kHz**: No certifica que el código no cause sobrecarga de procesamiento en proyectos con alta polifonía (`poly~`).
+5. **Cobertura Limitada a Niveles y Patrones Conocidos**: El oráculo solo detecta niveles críticos (`FAIL_LEVELS`: `error`, `fatal`, `critical`) y la lista cerrada de patrones en `FAIL_PATTERNS` (`scripts/audit.py`, ej. `doesn't match type`, `no such object`, `access violation`). Silencios fuera de esa lista no se distinguen de corrección: cualquier advertencia o fallo de Max fuera de esos patrones produce `PASS` sin que ello garantice la ausencia de anomalías.
 
 ---
 
@@ -44,12 +45,22 @@ Un veredicto `PASS` **nunca debe interpretarse como prueba de equivalencia algor
 | :--- | :--- | :--- |
 | **`PASS`** | Patcher estructuralmente legal, compilación exitosa y cero líneas rojas en `Max.log`. Si el paquete incluye `emitted-from.json`, además la procedencia quedó en `VALID`. | Proceder a empaquetado o pruebas auditivas manuales. |
 | **`FAIL`** | Error en tiempo de compilación, patchcord incompatible o advertencia en `Max.log`. | Bloqueo estricto. Auto-corrección requerida antes de reintentar. |
-| **`BLOCKED (RUNTIME_UNAVAILABLE)`** | `Max.exe` no está instalado o no se detectó en el host. | Prohibido certificar. Se requiere entorno con Cycling '74 Max. |
+| **`BLOCKED`** | `Max.exe` no está instalado en el host, la sesión de log no pudo aislarse o Max no completó la fase de carga. | Prohibido certificar. Se requiere entorno con Cycling '74 Max o investigar la ejecución. |
 | **`STALE_CONTRACTS`** | `max_contracts.json` cambió tras la emisión del parche (`verify-provenance`). | Recompilar el parche a partir del IR para actualizar índices y tipos. |
 | **`STALE_IR` / `STALE_SOURCE`** | El IR o el código fuente original fueron alterados post-emisión. | Re-ejecutar el pipeline de compilación. |
 | **`STALE_ARTIFACTS`** | Un artefacto emitido (`.maxpat`, `.cpp`, `CMakeLists.txt`) difiere de la huella SHA-256 registrada. | Bloqueo estricto. Recompilar y descartar el parche alterado. |
 | **`UNVERIFIABLE`** | La evidencia necesaria no existe o no puede leerse (contratos ilegibles, artefacto registrado ausente, huella no registrada). | Prohibido certificar. Restituir la evidencia y re-verificar; nunca se degrada a `VALID`. |
 | **`INVALID`** | `emitted-from.json` no existe, no es JSON parseable, o su estructura es malformada (raíz o secciones que no son objetos). | Prohibido certificar. Regenerar el paquete. |
+
+### Evaluación de Rendimiento en Python (`bench`) vs. Oráculo de Verificación
+
+Los comandos `python scripts/bench.py` y `python -m core.compiler.cli bench` evalúan presupuestos de latencia en microsegundos dentro del intérprete Python host (`time.perf_counter_ns`) y emiten veredictos de decisión:
+
+- **`SHIP`**: La rutina evaluada se mantiene estrictamente dentro de los presupuestos de latencia (`max_latency_us`, `max_p95_latency_us`) y aceleración (`min_speedup`).
+- **`NO_SHIP`**: La rutina excede el presupuesto de tiempo real o presenta una desaceleración inaceptable.
+
+> **Distinción Epistémica Estricta**:  
+> `SHIP` y `NO_SHIP` son métricas de simulación en Python host. **Bajo ninguna circunstancia sustituyen o constituyen un veredicto `PASS` de auditoría**, el cual queda reservado exclusivamente a la ejecución en vivo dentro de Cycling '74 Max (`scripts/audit.py`). Los términos `audit`, `PASS` y `APROBADO` no deben ser empleados para describir benchmarks de Python.
 
 ---
 

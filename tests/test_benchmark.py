@@ -91,6 +91,7 @@ class TestBenchmarkEngine(unittest.TestCase):
             min_latency_us=10.0,
             max_latency_us=15.0,
             p95_latency_us=14.2,
+            median_latency_us=11.5,
             speedup=2.555,
             reference_mean_us=31.54,
             reasons=["OK"]
@@ -98,7 +99,32 @@ class TestBenchmarkEngine(unittest.TestCase):
         d = v.to_dict()
         self.assertEqual(d["verdict"], "SHIP")
         self.assertEqual(d["mean_latency_us"], 12.346)
+        self.assertEqual(d["median_latency_us"], 11.5)
+        self.assertEqual(d["min_latency_us"], 10.0)
+        self.assertEqual(d["max_latency_us"], 15.0)
         self.assertEqual(d["speedup"], 2.56)
+
+    def test_benchmark_reproducibility(self):
+        """
+        Verifica que ejecuciones consecutivas del benchmark de Truax producen
+        veredictos identicos y estables (F2: eliminacion del veredicto coin-toss).
+        """
+        from scripts.bench import benchmark_truax_normal_form
+
+        verdicts = []
+        speedups = []
+        for _ in range(5):
+            v = benchmark_truax_normal_form()
+            verdicts.append(v.verdict)
+            self.assertIsNotNone(v.speedup)
+            speedups.append(v.speedup)
+
+        # 1. Todos los veredictos deben ser exactamente iguales a SHIP
+        self.assertTrue(all(verdict == "SHIP" for verdict in verdicts), f"Veredictos inestables: {verdicts}")
+
+        # 2. La dispersion de speedup entre ejecuciones debe ser acotada (< 0.5x de rango)
+        speedup_range = max(speedups) - min(speedups)
+        self.assertLess(speedup_range, 0.5, f"Dispersion excesiva en speedup: {speedups}")
 
 
 if __name__ == "__main__":

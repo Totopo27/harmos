@@ -160,7 +160,7 @@ def main():
     verify_prov_parser.add_argument("--source", default=None, help="Ruta al código fuente actual (opcional)")
 
     # Subcomando bench
-    bench_parser = subparsers.add_parser("bench", help="Ejecutar suite de benchmarks con veredicto explicito SHIP / NO_SHIP")
+    bench_parser = subparsers.add_parser("bench", help="Evaluar presupuestos de rendimiento en tiempo real (SHIP / NO_SHIP)")
     bench_parser.add_argument("--suite", choices=["truax", "tables", "all"], default="all", help="Suite a evaluar")
 
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
@@ -197,16 +197,21 @@ def main():
                 suites.append(benchmark_scale_generation_384())
 
             all_ship = True
-            print("\n" + "=" * 50)
-            print(" HARMOS BENCHMARK VERDICTS")
-            print("=" * 50)
+            print("\n" + "=" * 60)
+            print(" HARMOS BENCHMARK & TIMING EVALUATION")
+            print("=" * 60)
+            print(
+                "[i] AVISO: Evaluacion en Python host. No certifica DSP en Max MSP (ver docs/ORACULO_LIMITES.md).\n"
+            )
             for v in suites:
-                print(f"[*] {v.name}: [{v.verdict}] ({v.mean_latency_us:.2f} us)")
+                speedup_info = f", speedup: {v.speedup:.2f}x" if v.speedup is not None else ""
+                print(f"[*] {v.name}: [{v.verdict}] (mediana: {v.median_latency_us:.2f} us{speedup_info})")
                 for r in v.reasons:
                     print(f"    - {r}")
                 if v.verdict != "SHIP":
                     all_ship = False
-            print("-" * 50)
+            print("-" * 60)
+            print(f"EVALUACION FINAL DE RENDIMIENTO: {'SHIP' if all_ship else 'NO_SHIP'}")
             if not all_ship:
                 sys.exit(1)
         else:
