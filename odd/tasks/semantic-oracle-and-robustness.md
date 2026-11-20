@@ -18,8 +18,10 @@ Seguimiento ODD de tareas por commits unitarios atómicos.
 - [x] T3 (S4) [inline]: Redactar declaración formal de límites del oráculo y honestidad epistémica (I11). Commit: eeda01f
 - [x] T4 (S5) [inline]: Implementar veredictos explícitos en benchmarks (I6). Commit: 0eaa05b
 - [x] T5 (S6) [inline]: Refactorizar emisión C++ desacoplando Kernel Puro y Binding Min-Devkit. Commit: 70084a0
+- [x] T6 (S2) [inline]: Reemplazar aislamiento por centinela/offset por anclaje al header de sesión, parsing estructural de niveles, veredicto fail-closed, resolución de rutas relativas y eliminación de rutas absolutas del código. Commit: pending
 
 ## Log
 
 - L1: "ok, teniendo esto en cuenta, vamos paso a paso realizando todas las implementaciones que sugieres, cuando tengas una hecha haz commit relacionado a esta, luego procede con la siguiente, así las vamos generando por commits, me parece más ordenado."
 - L2: "modifica el informe que hiciste con esto reciente y luego volvamos a retomar el trabajo"
+- L3: "Lanza un audit para revisar lo relacionado con esto que hice recién" — Auditoría empírica del verificador en vivo sobre Max 9.1.5 (Windows 10 19045). Defectos confirmados y corregidos: Max trunca `Max.log` en cada arranque, por lo que un `seek` más allá de EOF devolvía 0 líneas y producía `PASS` falso; el centinela se sobrescribía antes de usarse; el glob `*Max 9*/Max.log` nunca coincidía; `"error:"` no matchea el formato real `"error]"`; `"no patcher"` no se detectaba; la primera corrida quedaba `BLOCKED` para siempre; y la heurística de estabilidad (2.5 s) es menor al arranque real (~30 s). Evidencia en vivo: fixture limpio → `PASS` (549 líneas, 0 errores); patcher roto → `FAIL` con `No such object` y `no patcher`. Rutas relativas ahora se resuelven antes de lanzar Max, y `resolve_max_executable` ya no codifica rutas absolutas de host. Suite completa y `scripts/check.py`: PASS.

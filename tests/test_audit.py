@@ -6,14 +6,19 @@ arranque), la deteccion estructural de errores y el caracter fail-closed del
 veredicto: una sesion vacia o sin fin de carga nunca puede producir PASS.
 """
 import unittest
+import json
+import os
+import sys
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
+from core.compiler.cli import compile_ir
 from scripts import audit
 from scripts.audit import (
     audit_patcher_live,
+    audit_provenance,
     evaluate_session,
     load_session_lines,
     parse_log_line,
@@ -225,6 +230,146 @@ class TestAuditPatcherLive(LogFixtureMixin, unittest.TestCase):
         verdict, details = self._run(None, timeout=1)
         self.assertEqual(verdict, "BLOCKED")
         self.assertTrue(any("sesion de Max.log" in d for d in details))
+
+    def test_relative_patcher_path_is_resolved_before_launch(self):
+        """Regresion: Max no abre rutas relativas; el verifier debe absolutizarlas."""
+        captured = {}
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "rel.maxpat").write_text("{}", encoding="utf-8")
+            log = self.make_log(_session())
+
+            def fake_popen(argv, *args, **kwargs):
+                captured["argv"] = list(argv)
+                return FakeProc(log, None)
+
+            os.chdir(tmp)
+            try:
+                with mock.patch.object(audit, "resolve_max_executable", return_value=Path("Max.exe")), \
+                        mock.patch.object(audit, "resolve_max_log_path", return_value=log), \
+                        mock.patch.object(audit, "SETTLE_SECONDS", 0.01), \
+                        mock.patch.object(audit.subprocess, "Popen", side_effect=fake_popen):
+                    audit_patcher_live(Path("rel.maxpat"), timeout_seconds=3)
+            finally:
+                os.chdir(cwd)
+
+        self.assertTrue(Path(captured["argv"][1]).is_absolute())
+
+
+class TestProvenanceGate(LogFixtureMixin, unittest.TestCase):
+    """La procedencia se certifica dentro del audit: un paquete obsoleto nunca obtiene PASS."""
+
+    def _compile_package(self, object_name="prov_obj"):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        ir = root / f"{object_name}.ir.json"
+        ir.write_text(
+            json.dumps(
+                {
+                    "object_name": object_name,
+                    "category": "control",
+                    "inlets": [{"id": 0, "type": "float", "description": "In"}],
+                    "outlets": [{"id": 0, "type": "float", "description": "Out"}],
+                },
+                indent=4,
+            ),
+            encoding="utf-8",
+        )
+        return compile_ir(str(ir), str(root / "pkg"))
+
+    def _audit_without_runtime(self, patcher):
+        """El veredicto de procedencia debe decidirse antes de arrancar Max."""
+        with mock.patch.object(audit, "resolve_max_executable", return_value=Path("Max.exe")), \
+                mock.patch.object(
+                    audit.subprocess, "Popen",
+                    side_effect=AssertionError("Max.exe no debe lanzarse con procedencia rechazada"),
+                ):
+            return audit_patcher_live(patcher, timeout_seconds=1)
+
+    def test_package_without_provenance_record_is_not_a_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            patcher = Path(tmp, "suelto.maxpat")
+            patcher.write_text("{}", encoding="utf-8")
+
+            self.assertEqual((None, []), audit_provenance(patcher))
+
+    def test_tampered_artifact_blocks_before_launching_max(self):
+        result = self._compile_package()
+        maxpat = Path(result["maxpat_path"])
+        maxpat.write_bytes(maxpat.read_bytes() + b"\x00")
+
+        verdict, details = self._audit_without_runtime(maxpat)
+
+        self.assertEqual("STALE_ARTIFACTS", verdict)
+        self.assertTrue(any("procedencia" in d.lower() for d in details))
+
+    def test_stale_contracts_keeps_its_own_verdict(self):
+        result = self._compile_package()
+        prov = Path(result["provenance_path"])
+        record = json.loads(prov.read_text(encoding="utf-8"))
+        record["contracts"]["sha256"] = "0" * 64
+        prov.write_text(json.dumps(record, indent=4), encoding="utf-8")
+
+        verdict, _ = self._audit_without_runtime(Path(result["maxpat_path"]))
+
+        self.assertEqual("STALE_CONTRACTS", verdict)
+
+    def test_corrupt_provenance_record_is_invalid(self):
+        result = self._compile_package()
+        Path(result["provenance_path"]).write_text("{oops", encoding="utf-8")
+
+        verdict, _ = self._audit_without_runtime(Path(result["maxpat_path"]))
+
+        self.assertEqual("INVALID", verdict)
+
+    def test_valid_provenance_is_disclosed_on_pass(self):
+        result = self._compile_package()
+        patcher = Path(result["maxpat_path"])
+        log = self.make_log([])
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=Path("Max.exe")), \
+                mock.patch.object(audit, "resolve_max_log_path", return_value=log), \
+                mock.patch.object(audit, "SETTLE_SECONDS", 0.01), \
+                mock.patch.object(
+                    audit.subprocess, "Popen",
+                    side_effect=lambda *a, **k: FakeProc(log, _session()),
+                ):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=3)
+
+        self.assertEqual("PASS", verdict)
+        self.assertTrue(any("Procedencia verificada" in d for d in details))
+
+    def test_pass_without_record_discloses_uncertified_provenance(self):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".maxpat", delete=False, encoding="utf-8")
+        handle.write("{}")
+        handle.close()
+        patcher = Path(handle.name)
+        self.addCleanup(lambda: patcher.unlink() if patcher.exists() else None)
+        log = self.make_log([])
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=Path("Max.exe")), \
+                mock.patch.object(audit, "resolve_max_log_path", return_value=log), \
+                mock.patch.object(audit, "SETTLE_SECONDS", 0.01), \
+                mock.patch.object(
+                    audit.subprocess, "Popen",
+                    side_effect=lambda *a, **k: FakeProc(log, _session()),
+                ):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=3)
+
+        self.assertEqual("PASS", verdict)
+        self.assertTrue(any("procedencia no fue certificada" in d for d in details))
+
+    def test_provenance_verdict_maps_to_nonzero_exit(self):
+        with mock.patch.object(sys, "argv", ["audit.py", "--patcher", "x.maxpat"]), \
+                mock.patch.object(
+                    audit, "audit_patcher_live",
+                    return_value=("STALE_CONTRACTS", ["detalle"]),
+                ):
+            with self.assertRaises(SystemExit) as ctx:
+                audit.main()
+
+        self.assertEqual(1, ctx.exception.code)
 
 
 if __name__ == "__main__":

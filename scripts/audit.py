@@ -14,6 +14,8 @@ Contrato Operativo (Hard Rules):
    - Parsing estricto de la sesion de Max.log: nivel `error` o patrones criticos.
    - Fail-closed: sin sesion propia o sin carga completada el veredicto es BLOCKED.
    - Generacion de evidencia / receipt verificable.
+   - Procedencia: si el paquete incluye `emitted-from.json` junto al patcher, se
+     verifica antes de arrancar Max; un veredicto distinto de VALID impide PASS.
 """
 import sys
 import os
@@ -24,6 +26,14 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
+
+# El script se ejecuta como `python scripts/audit.py`: la raiz del repo debe estar
+# en sys.path para importar el motor de procedencia.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.compiler.provenance import verify_provenance
 
 # Formato canonico de linea de Max.log:  [YYYY-MM-DD HH:MM:SS.ffffff level] [pid] mensaje
 LOG_LINE_RE = re.compile(
@@ -58,6 +68,41 @@ SETTLE_SECONDS = 1.0
 POLL_INTERVAL_SECONDS = 0.25
 DEFAULT_TIMEOUT_SECONDS = 60
 
+# Huella de procedencia emitida por el compilador junto al paquete.
+PROVENANCE_RECORD_NAME = "emitted-from.json"
+
+# Veredictos de procedencia que impiden emitir PASS: el paquete no corresponde a
+# los insumos con los que fue emitido, o la evidencia no es verificable.
+PROVENANCE_BLOCKING_VERDICTS = (
+    "STALE_CONTRACTS",
+    "STALE_IR",
+    "STALE_SOURCE",
+    "STALE_ARTIFACTS",
+    "UNVERIFIABLE",
+    "INVALID",
+)
+
+
+def audit_provenance(patcher_path: Path) -> Tuple[Optional[str], List[str]]:
+    """
+    Certifica la procedencia del paquete que contiene el patcher.
+
+    Devuelve (veredicto, detalles), o (None, []) cuando no existe
+    `emitted-from.json` junto al patcher: un paquete sin huella no es un fallo,
+    simplemente no hay procedencia que certificar.
+    """
+    record = patcher_path.parent / PROVENANCE_RECORD_NAME
+    if not record.is_file():
+        return None, []
+
+    try:
+        return verify_provenance(record)
+    except Exception as e:
+        return "UNVERIFIABLE", [
+            f"Error al verificar la procedencia: {e}",
+            "Sin evidencia legible no se certifica el paquete.",
+        ]
+
 
 def resolve_max_executable() -> Optional[Path]:
     """Resuelve la ruta a Max.exe via variable de entorno, Registro o rutas conocidas."""
@@ -82,17 +127,22 @@ def resolve_max_executable() -> Optional[Path]:
         except Exception:
             pass
 
-    # Rutas por defecto en Windows, compuestas desde variables de entorno:
-    # el codigo nunca codifica rutas absolutas de host.
-    roots = [
-        os.environ.get("ProgramW6432"),
-        os.environ.get("ProgramFiles"),
-        os.environ.get("ProgramFiles(x86)"),
-    ]
+    # Rutas por defecto en Windows: se recorren los directorios de programa
+    # declarados por el entorno y las unidades fijas del host. El codigo nunca
+    # codifica rutas absolutas de host.
+    roots = []
+    for env_name in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
+        root = os.environ.get(env_name)
+        if root and root not in roots:
+            roots.append(root)
+    if sys.platform == "win32":
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            candidate_root = f"{letter}:\\Program Files"
+            if candidate_root not in roots and Path(candidate_root).is_dir():
+                roots.append(candidate_root)
+
     candidates = []
     for root in roots:
-        if not root:
-            continue
         for version in ("Max 9", "Max 8"):
             candidate = Path(root) / "Cycling '74" / version / "Max.exe"
             if candidate not in candidates:
@@ -254,7 +304,9 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     """
     Ejecuta el patcher en Max.exe y audita la sesion de log resultante.
     Devuelve (veredicto, detalle_lineas).
-    Veredictos posibles: PASS, FAIL, BLOCKED.
+    Veredictos posibles: PASS, FAIL, BLOCKED, y los de procedencia
+    (STALE_CONTRACTS, STALE_IR, STALE_SOURCE, STALE_ARTIFACTS,
+    UNVERIFIABLE, INVALID) cuando el paquete trae emitted-from.json.
     """
     # Max no abre rutas relativas: se resuelve a absoluta antes de lanzarlo.
     patcher_path = patcher_path.expanduser().resolve()
@@ -273,6 +325,16 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
             "Max.exe no fue detectado en el sistema.",
             "Contrato Harmos: Prohibido emitir PASS sin ejecucion en vivo.",
             "Instale Cycling '74 Max o configure la variable MAX_PATH.",
+        ]
+
+    # Procedencia: se decide antes de arrancar Max. Un paquete obsoleto o alterado
+    # no gasta un arranque del runtime para recibir un PASS que no le corresponde.
+    prov_verdict, prov_details = audit_provenance(patcher_path)
+    if prov_verdict is not None and prov_verdict != "VALID":
+        return prov_verdict, [
+            f"Procedencia rechazada: {PROVENANCE_RECORD_NAME} no certifica este paquete.",
+            *prov_details,
+            "Recompilar el paquete desde el IR antes de auditar: no se emite PASS.",
         ]
 
     # Puede no existir todavia: se re-resuelve durante el sondeo.
