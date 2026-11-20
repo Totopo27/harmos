@@ -166,7 +166,7 @@ def generate_min_wrapper(ir: Dict[str, Any], kernel_header_name: str) -> str:
         lines.append("        return m_kernel.process_sample(in);")
         lines.append("    }")
     else:
-        lines.append('    message<threadcheck::none> number { this, "number", "Procesa entrada numerica via kernel puro",')
+        lines.append('    message<> number { this, "number", "Procesa entrada numerica via kernel puro",')
         lines.append("        MIN_FUNCTION {")
         lines.append("            double val = static_cast<double>(args[0]);")
         lines.append("            double res = m_kernel.process_scalar(val);")

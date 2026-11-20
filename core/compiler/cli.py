@@ -5,6 +5,8 @@ Genera parches .maxpat validados con TypedPatch y esqueletos C++ Min-Devkit con 
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -57,11 +59,173 @@ def generate_cpp_min_devkit(ir: Dict[str, Any], output_path: str, kernel_path: O
     return kernel_path
 
 
-def generate_cmakelists(object_name: str, output_path: str) -> None:
-    content = f"""c74_min_project({object_name})
+def resolve_min_api_dir(explicit_path: Optional[str] = None) -> Path:
+    """Resuelve la ruta al directorio source/min-api de Min-DevKit sin hardcodear rutas de host."""
+    if explicit_path:
+        p = Path(explicit_path)
+        if p.is_dir():
+            return p.resolve()
+        raise FileNotFoundError(f"Ruta de Min-DevKit especificada no existe: {explicit_path}")
+
+    env_min = os.environ.get("C74_MIN_API_DIR")
+    if env_min and Path(env_min).is_dir():
+        return Path(env_min).resolve()
+
+    env_devkit = os.environ.get("MIN_DEVKIT_DIR")
+    if env_devkit:
+        candidate = Path(env_devkit) / "source" / "min-api"
+        if candidate.is_dir():
+            return candidate.resolve()
+
+    # Raiz del repositorio: c74support/min-devkit/source/min-api
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    candidate = repo_root / "c74support" / "min-devkit" / "source" / "min-api"
+    if candidate.is_dir():
+        return candidate.resolve()
+
+    raise FileNotFoundError(
+        "No se pudo localizar el directorio source/min-api de Min-DevKit. "
+        "Configure la variable de entorno MIN_DEVKIT_DIR o C74_MIN_API_DIR."
+    )
+
+
+def generate_cmakelists(object_name: str, output_path: str, min_api_dir: Optional[str] = None) -> None:
+    content = f"""cmake_minimum_required(VERSION 3.15)
+
+if (NOT DEFINED C74_MIN_API_DIR)
+    if (DEFINED ENV{{C74_MIN_API_DIR}})
+        set(C74_MIN_API_DIR "$ENV{{C74_MIN_API_DIR}}")
+    elseif (DEFINED ENV{{MIN_DEVKIT_DIR}})
+        set(C74_MIN_API_DIR "$ENV{{MIN_DEVKIT_DIR}}/source/min-api")
+    else ()
+        find_path(C74_MIN_API_DIR NAMES script/min-pretarget.cmake
+            PATHS
+            "${{CMAKE_CURRENT_SOURCE_DIR}}/c74support/min-devkit/source/min-api"
+            "${{CMAKE_CURRENT_SOURCE_DIR}}/../c74support/min-devkit/source/min-api"
+            "${{CMAKE_CURRENT_SOURCE_DIR}}/../../c74support/min-devkit/source/min-api"
+            "${{CMAKE_CURRENT_SOURCE_DIR}}/../../../c74support/min-devkit/source/min-api"
+        )
+    endif ()
+endif ()
+
+if (NOT DEFINED C74_LIBRARY_OUTPUT_DIRECTORY)
+    set(C74_LIBRARY_OUTPUT_DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}")
+endif ()
+
+include("${{C74_MIN_API_DIR}}/script/min-pretarget.cmake")
+
+project({object_name})
+set({object_name}_EXTERN_OUTPUT_NAME "{object_name}")
+
+include_directories(
+    "${{C74_INCLUDES}}"
+    "${{CMAKE_CURRENT_SOURCE_DIR}}"
+)
+
+set(SOURCE_FILES
+    {object_name}.cpp
+)
+
+add_library(
+    {object_name}
+    MODULE
+    ${{SOURCE_FILES}}
+)
+
+include("${{C74_MIN_API_DIR}}/script/min-posttarget.cmake")
+
+if (WIN32)
+    target_link_libraries({object_name} PUBLIC ${{MaxAPI_LIB}} ${{MaxAudio_LIB}} ${{Jitter_LIB}})
+endif ()
 """
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def build_external(
+    output_dir: str,
+    object_name: str,
+    min_api_dir: Optional[str] = None
+) -> str:
+    """
+    Configura y compila el external nativo (.mxe64 en Windows) usando CMake y Min-DevKit.
+    Coloca el binario resultante en output_dir (junto al patcher) y en output_dir/externals/.
+    """
+    out_p = Path(output_dir).resolve()
+    resolved_min_api = resolve_min_api_dir(min_api_dir)
+
+    cmake_bin = shutil.which("cmake")
+    if not cmake_bin:
+        raise RuntimeError(
+            "cmake no fue detectado en PATH. Se requiere CMake para construir el external nativo."
+        )
+
+    build_dir = out_p / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    posix_out = out_p.as_posix()
+    posix_min_api = resolved_min_api.as_posix()
+
+    cfg_cmd = [
+        cmake_bin,
+        "-S", str(out_p),
+        "-B", str(build_dir),
+        f"-DC74_MIN_API_DIR={posix_min_api}",
+        f"-DC74_LIBRARY_OUTPUT_DIRECTORY={posix_out}"
+    ]
+
+    if sys.platform == "win32":
+        cfg_cmd.extend(["-G", "Visual Studio 17 2022", "-A", "x64"])
+
+    res_cfg = subprocess.run(cfg_cmd, capture_output=True, text=True)
+    if res_cfg.returncode != 0:
+        if sys.platform == "win32" and "-G" in cfg_cmd:
+            fallback_cmd = [
+                cmake_bin,
+                "-S", str(out_p),
+                "-B", str(build_dir),
+                f"-DC74_MIN_API_DIR={posix_min_api}",
+                f"-DC74_LIBRARY_OUTPUT_DIRECTORY={posix_out}"
+            ]
+            res_cfg = subprocess.run(fallback_cmd, capture_output=True, text=True)
+
+    if res_cfg.returncode != 0:
+        raise RuntimeError(
+            f"Fallo al configurar CMake para '{object_name}':\n{res_cfg.stderr or res_cfg.stdout}"
+        )
+
+    bld_cmd = [
+        cmake_bin,
+        "--build", str(build_dir),
+        "--config", "Release"
+    ]
+    res_bld = subprocess.run(bld_cmd, capture_output=True, text=True)
+    if res_bld.returncode != 0:
+        raise RuntimeError(
+            f"Fallo al compilar '{object_name}' con CMake:\n{res_bld.stderr or res_bld.stdout}"
+        )
+
+    ext_suffix = ".mxe64" if sys.platform == "win32" else ".mxo"
+    expected_name = f"{object_name}{ext_suffix}"
+
+    candidate = out_p / expected_name
+    if not candidate.is_file():
+        found = list(build_dir.rglob(f"*{ext_suffix}"))
+        if found:
+            shutil.copy2(found[0], candidate)
+
+    if not candidate.is_file():
+        raise FileNotFoundError(
+            f"La compilacion finalizo pero no se encontro el binario '{expected_name}' en {out_p}."
+        )
+
+    pkg_externals = out_p / "externals"
+    pkg_externals.mkdir(parents=True, exist_ok=True)
+    pkg_candidate = pkg_externals / expected_name
+    if not pkg_candidate.is_file() or candidate.resolve() != pkg_candidate.resolve():
+        shutil.copy2(candidate, pkg_candidate)
+
+    return str(candidate)
 
 
 def generate_test_maxpat(ir: Dict[str, Any], output_path: str) -> None:
@@ -97,7 +261,13 @@ def generate_test_maxpat(ir: Dict[str, Any], output_path: str) -> None:
     patch.save(output_path)
 
 
-def compile_ir(ir_file_path: str, output_dir: str, source_path: Optional[str] = None) -> Dict[str, Any]:
+def compile_ir(
+    ir_file_path: str,
+    output_dir: str,
+    source_path: Optional[str] = None,
+    build: bool = False,
+    min_api_dir: Optional[str] = None
+) -> Dict[str, Any]:
     with open(ir_file_path, "r", encoding="utf-8") as f:
         ir_data = json.load(f)
 
@@ -111,22 +281,30 @@ def compile_ir(ir_file_path: str, output_dir: str, source_path: Optional[str] = 
 
     generate_test_maxpat(ir_data, maxpat_path)
     generate_cpp_min_devkit(ir_data, cpp_path, kernel_path=kernel_path)
-    generate_cmakelists(object_name, cmake_path)
+    generate_cmakelists(object_name, cmake_path, min_api_dir=min_api_dir)
 
-    # Generar huella de procedencia criptográfica (emitted-from.json)
+    external_path: Optional[str] = None
+    if build:
+        external_path = build_external(output_dir, object_name, min_api_dir=min_api_dir)
+
+    # Generar huella de procedencia criptografica (emitted-from.json)
+    artifacts: Dict[str, Any] = {
+        "maxpat": maxpat_path,
+        "cpp": cpp_path,
+        "kernel": kernel_path,
+        "cmake": cmake_path,
+    }
+    if external_path and os.path.exists(external_path):
+        artifacts["external"] = external_path
+
     prov_record = build_provenance_record(
         ir_file_path,
         source_path=source_path,
-        artifacts={
-            "maxpat": maxpat_path,
-            "cpp": cpp_path,
-            "kernel": kernel_path,
-            "cmake": cmake_path,
-        }
+        artifacts=artifacts
     )
     prov_path = write_provenance_file(output_dir, prov_record)
 
-    return {
+    res = {
         "success": True,
         "object_name": object_name,
         "maxpat_path": maxpat_path,
@@ -135,6 +313,10 @@ def compile_ir(ir_file_path: str, output_dir: str, source_path: Optional[str] = 
         "cmake_path": cmake_path,
         "provenance_path": str(prov_path)
     }
+    if external_path:
+        res["external_path"] = external_path
+
+    return res
 
 
 def main():
@@ -146,6 +328,8 @@ def main():
     compile_parser.add_argument("ir_file", help="Ruta al archivo de especificación IR (.ir.json)")
     compile_parser.add_argument("--out", default="./build_harmos", help="Directorio destino de generación")
     compile_parser.add_argument("--source", default=None, help="Ruta al código fuente original (opcional para procedencia)")
+    compile_parser.add_argument("--no-build", action="store_true", default=False, help="Emitir solo archivos fuente sin compilar el binario nativo")
+    compile_parser.add_argument("--build", dest="force_build", action="store_true", default=False, help="Compilar el external nativo (.mxe64)")
 
     # Subcomando extract
     extract_parser = subparsers.add_parser("extract", help="Extraer una especificación IR desde código fuente (TypeScript/JS)")
@@ -171,12 +355,15 @@ def main():
 
     try:
         if args.command == "compile":
-            res = compile_ir(args.ir_file, args.out, source_path=args.source)
+            build_native = not args.no_build
+            res = compile_ir(args.ir_file, args.out, source_path=args.source, build=build_native)
             print(f"Compilacion exitosa para: {res['object_name']}")
             print(f"  Patcher de prueba: {res['maxpat_path']}")
             print(f"  Fuente C++:        {res['cpp_path']}")
             print(f"  CMakeLists:        {res['cmake_path']}")
             print(f"  Procedencia:       {res['provenance_path']}")
+            if res.get("external_path"):
+                print(f"  External nativo:   {res['external_path']}")
         elif args.command == "extract":
             res = handle_extract(args.source_file, args.out, object_name=args.name)
             print(f"Extraccion exitosa para: {res['object_name']}")

@@ -108,6 +108,28 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertTrue(os.path.exists(compile_res["maxpat_path"]))
         self.assertTrue(os.path.exists(compile_res["cpp_path"]))
 
+    def test_compile_ir_with_build_emits_native_external(self):
+        sample_ir = {
+            "object_name": "harmos.gain_meter",
+            "category": "control",
+            "target_runtime": "cpp_min_devkit",
+            "inlets": [
+                {"id": 0, "type": "float", "description": "Audio input"}
+            ],
+            "outlets": [
+                {"id": 0, "type": "float", "description": "Meter output"}
+            ]
+        }
+        ir_path = os.path.join(self.temp_dir, "meter.ir.json")
+        with open(ir_path, "w", encoding="utf-8") as f:
+            json.dump(sample_ir, f)
+
+        res = compile_ir(ir_path, output_dir=self.temp_dir, build=True)
+        self.assertTrue(res["success"])
+        self.assertIn("external_path", res)
+        self.assertTrue(os.path.exists(res["external_path"]))
+        self.assertTrue(res["external_path"].endswith(".mxe64"))
+
 
 
 if __name__ == "__main__":
