@@ -18,7 +18,7 @@ Seguimiento ODD de tareas por commits unitarios atómicos.
 - [x] T3 (S4) [inline]: Redactar declaración formal de límites del oráculo y honestidad epistémica (I11). Commit: eeda01f
 - [x] T4 (S5) [inline]: Implementar veredictos explícitos en benchmarks (I6). Commit: 0eaa05b
 - [x] T5 (S6) [inline]: Refactorizar emisión C++ desacoplando Kernel Puro y Binding Min-Devkit. Commit: 70084a0
-- [x] T6 (S2) [inline]: Reemplazar aislamiento por centinela/offset por anclaje al header de sesión, parsing estructural de niveles, veredicto fail-closed, resolución de rutas relativas y eliminación de rutas absolutas del código. Commit: pending
+- [x] T6 (S2) [inline]: Reemplazar aislamiento por centinela/offset por anclaje al header de sesión, parsing estructural de niveles, veredicto fail-closed, resolución de rutas relativas y eliminación de rutas absolutas del código. Commit: cf586ac
 
 ## Log
 
