@@ -16,10 +16,15 @@ Contrato Operativo (Hard Rules):
    - Generacion de evidencia / receipt verificable.
    - Procedencia: si el paquete incluye `emitted-from.json` junto al patcher, se
      verifica antes de arrancar Max; un veredicto distinto de VALID impide PASS.
+    - Contratos: los patchcords del patcher se validan contra
+      `core/schema/max_contracts.json` antes de arrancar Max; una conexion que el
+      contrato declara ilegal produce FAIL. Se reutiliza la misma puerta que usa
+      el emisor (`ContractEngine`), sin indices de inlet/outlet codificados aqui.
 """
 import sys
 import os
 import re
+import json
 import time
 import argparse
 import subprocess
@@ -34,6 +39,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from core.compiler.provenance import verify_provenance
+from core.compiler.contract_engine import ContractEngine
 
 # Formato canonico de linea de Max.log:  [YYYY-MM-DD HH:MM:SS.ffffff level] [pid] mensaje
 LOG_LINE_RE = re.compile(
@@ -102,6 +108,144 @@ def audit_provenance(patcher_path: Path) -> Tuple[Optional[str], List[str]]:
             f"Error al verificar la procedencia: {e}",
             "Sin evidencia legible no se certifica el paquete.",
         ]
+
+
+# Archivo de contratos que valida la puerta estatica de patchcords.
+CONTRACTS_SCHEMA_PATH = "core/schema/max_contracts.json"
+
+
+class PatcherDocumentError(ValueError):
+    """El objetivo no es un documento JSON nativo de Max; no puede cargarse."""
+
+
+def _maxpat_containers(document: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Devuelve todos los contenedores `patcher` del documento, subpatchers incluidos.
+
+    En el formato nativo de Max un objeto `p`/`bpatcher` guarda su parche hijo en
+    `box["patcher"]`, por lo que los cables internos solo se validan recorriendo
+    esos contenedores.
+    """
+    containers: List[Dict[str, Any]] = []
+    pending = [document.get("patcher")]
+    while pending:
+        current = pending.pop()
+        if not isinstance(current, dict):
+            continue
+        containers.append(current)
+        for entry in current.get("boxes") or []:
+            box = entry.get("box") if isinstance(entry, dict) else None
+            if isinstance(box, dict) and isinstance(box.get("patcher"), dict):
+                pending.append(box["patcher"])
+    return containers
+
+
+def _index_boxes(container: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    """Mapea el id de cada caja a su texto y maxclass declarados."""
+    index: Dict[str, Dict[str, str]] = {}
+    for entry in container.get("boxes") or []:
+        box = entry.get("box") if isinstance(entry, dict) else None
+        if not isinstance(box, dict):
+            continue
+        box_id = box.get("id")
+        if not isinstance(box_id, str) or not box_id:
+            continue
+        text = box.get("text")
+        maxclass = box.get("maxclass")
+        index[box_id] = {
+            "text": text if isinstance(text, str) else "",
+            "maxclass": maxclass if isinstance(maxclass, str) else "",
+        }
+    return index
+
+
+def _as_port_index(value: Any) -> Optional[int]:
+    """Normaliza el indice de inlet/outlet de un patchline; None si no es entero."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    return int(value)
+
+
+def audit_contracts(patcher_path: Path) -> Tuple[Optional[List[str]], int]:
+    """
+    Valida los patchcords del patcher contra `core/schema/max_contracts.json`.
+
+    Recorre el documento nativo de Max y evalua cada cable con
+    `ContractEngine.is_valid_connection`, la misma puerta que usa el emisor
+    (`TypedPatch.connect`). No hay numeros de inlet/outlet codificados aqui: el
+    motor resuelve los contratos y es permisivo con objetos sin contrato.
+
+    Devuelve (violaciones, cables_evaluados) donde `violaciones` es `None` cuando
+    el archivo no expone un contenedor `patcher` nativo: en ese caso no hay
+    contratos que validar y el veredicto lo declara explicitamente.
+    Lanza `PatcherDocumentError` si el archivo no es JSON legible.
+    """
+    try:
+        document = json.loads(patcher_path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError) as e:
+        raise PatcherDocumentError(
+            f"No se pudo leer el patcher {patcher_path.name}: {e}"
+        ) from e
+    except json.JSONDecodeError as e:
+        raise PatcherDocumentError(
+            f"El patcher {patcher_path.name} no es un documento JSON nativo de Max: {e}"
+        ) from e
+
+    containers = _maxpat_containers(document) if isinstance(document, dict) else []
+    if not containers:
+        return None, 0
+
+    engine = ContractEngine()
+    violations: List[str] = []
+    checked = 0
+
+    for container in containers:
+        boxes = _index_boxes(container)
+        for entry in container.get("lines") or []:
+            patchline = entry.get("patchline") if isinstance(entry, dict) else None
+            if not isinstance(patchline, dict):
+                continue
+            source = patchline.get("source")
+            destination = patchline.get("destination")
+            if not isinstance(source, list) or not isinstance(destination, list):
+                continue
+            if len(source) < 2 or len(destination) < 2:
+                continue
+
+            src_id, src_outlet = source[0], _as_port_index(source[1])
+            dest_id, dest_inlet = destination[0], _as_port_index(destination[1])
+            if src_outlet is None or dest_inlet is None:
+                continue
+
+            src_box = boxes.get(src_id) if isinstance(src_id, str) else None
+            dest_box = boxes.get(dest_id) if isinstance(dest_id, str) else None
+            if src_box is None or dest_box is None:
+                # Extremo no resoluble: la carga en vivo lo reporta como fallo.
+                continue
+
+            checked += 1
+            src_label = src_box["text"] or src_id
+            dest_label = dest_box["text"] or dest_id
+
+            if dest_box["maxclass"] == "comment":
+                violations.append(
+                    f"{src_label} outlet {src_outlet} -> {dest_label}: "
+                    "las cajas 'comment' carecen de inlets funcionales."
+                )
+                continue
+
+            valid, reason = engine.is_valid_connection(
+                src_box["text"], src_outlet, dest_box["text"], dest_inlet
+            )
+            if not valid:
+                violations.append(
+                    f"{src_label} outlet {src_outlet} -> {dest_label} "
+                    f"inlet {dest_inlet}: {reason}"
+                )
+
+    return violations, checked
 
 
 def resolve_max_executable() -> Optional[Path]:
@@ -307,6 +451,8 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     Veredictos posibles: PASS, FAIL, BLOCKED, y los de procedencia
     (STALE_CONTRACTS, STALE_IR, STALE_SOURCE, STALE_ARTIFACTS,
     UNVERIFIABLE, INVALID) cuando el paquete trae emitted-from.json.
+    Antes de arrancar Max se validan los patchcords contra
+    `CONTRACTS_SCHEMA_PATH`: una conexion ilegal produce FAIL sin gastar arranque.
     """
     # Max no abre rutas relativas: se resuelve a absoluta antes de lanzarlo.
     patcher_path = patcher_path.expanduser().resolve()
@@ -335,6 +481,25 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
             f"Procedencia rechazada: {PROVENANCE_RECORD_NAME} no certifica este paquete.",
             *prov_details,
             "Recompilar el paquete desde el IR antes de auditar: no se emite PASS.",
+        ]
+
+    # Contratos: los patchcords se validan contra max_contracts.json antes de
+    # arrancar Max. Un cable ilegal no gasta un arranque del runtime ni recibe un
+    # PASS que el contrato no respalda.
+    try:
+        contract_violations, contract_checked = audit_contracts(patcher_path)
+    except PatcherDocumentError as e:
+        return "FAIL", [
+            str(e),
+            "Un patcher ilegible no puede cargarse en Max: no se emite PASS.",
+        ]
+
+    if contract_violations:
+        return "FAIL", [
+            "Contratos rechazados: el patcher contiene conexiones ilegales segun "
+            f"{CONTRACTS_SCHEMA_PATH}.",
+            *contract_violations[:20],
+            "Corregir el emisor o el IR antes de auditar: no se emite PASS.",
         ]
 
     # Puede no existir todavia: se re-resuelve durante el sondeo.
@@ -398,6 +563,20 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     elif prov_verdict is None:
         details.append(
             f"Sin {PROVENANCE_RECORD_NAME} junto al patcher: la procedencia no fue certificada."
+        )
+
+    if contract_violations is None:
+        details.append(
+            "Contratos no evaluados: el archivo no expone un contenedor 'patcher' nativo de Max."
+        )
+    elif contract_checked:
+        details.append(
+            f"Contratos verificados: {contract_checked} conexiones evaluadas contra "
+            f"{CONTRACTS_SCHEMA_PATH}, 0 ilegales."
+        )
+    else:
+        details.append(
+            f"Contratos verificados: 0 patchcords que evaluar en {CONTRACTS_SCHEMA_PATH}."
         )
 
     return verdict, details
