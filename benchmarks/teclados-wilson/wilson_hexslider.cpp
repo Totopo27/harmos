@@ -1,4 +1,5 @@
 #include "c74_min.h"
+#include "wilson_hexslider_kernel.hpp"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -243,54 +244,27 @@ private:
         c74::max::jgraphics_stroke(jg);
     }
 
-    int hit_test(double x, double y) {
-        double r = cell_size.get();
-        int c_count = cols.get();
-        int r_count = rows.get();
-        double sqrt3 = 1.732050807568877;
-        double h_spacing = r * 1.5;
-        double v_spacing = r * sqrt3;
-
-        int index = 0;
-        for (int row = 0; row < r_count; ++row) {
-            for (int col = 0; col < c_count; ++col) {
-                double cx = col * h_spacing + r;
-                double cy = row * v_spacing + (col % 2 == 1 ? (v_spacing * 0.5) : 0.0) + (r * sqrt3 * 0.5);
-
-                double dx = x - cx;
-                double dy = y - cy;
-                if ((dx * dx + dy * dy) <= (r * r * 0.85)) {
-                    return index;
-                }
-                index++;
-            }
-        }
-        return -1;
+    harmos::kernels::wilson::HexsliderKernel get_kernel() const noexcept {
+        harmos::kernels::wilson::HexsliderKernel k;
+        k.cols = cols.get();
+        k.rows = rows.get();
+        k.cell_size = cell_size.get();
+        k.base_freq = base_freq.get();
+        k.octave_offset = octave_offset.get();
+        k.temperament_mode = std::string(c74::min::symbol(temperament_mode.get()));
+        k.edo_divisions = edo_divisions.get();
+        k.step_x = step_x.get();
+        k.step_y = step_y.get();
+        k.custom_scale_ratios = custom_scale_ratios;
+        return k;
     }
 
-    double compute_cell_frequency(int col, int row) {
-        double fundamental = base_freq.get() * std::pow(2.0, static_cast<double>(octave_offset.get()));
-        int step_count = col * step_x.get() + row * step_y.get();
+    int hit_test(double x, double y) const noexcept {
+        return get_kernel().hit_test(x, y);
+    }
 
-        if (temperament_mode.get() == c74::min::symbol("edo")) {
-            double divisions = edo_divisions.get();
-            if (divisions <= 0.0) divisions = 12.0;
-            return fundamental * std::pow(2.0, static_cast<double>(step_count) / divisions);
-        }
-
-        if (!custom_scale_ratios.empty()) {
-            int scale_size = static_cast<int>(custom_scale_ratios.size());
-            int octave_shift = step_count / scale_size;
-            int ratio_idx = step_count % scale_size;
-            if (ratio_idx < 0) {
-                ratio_idx += scale_size;
-                octave_shift -= 1;
-            }
-            double ratio = custom_scale_ratios[ratio_idx];
-            return fundamental * ratio * std::pow(2.0, static_cast<double>(octave_shift));
-        }
-
-        return fundamental * std::pow(2.0, static_cast<double>(step_count) / 12.0);
+    double compute_cell_frequency(int col, int row) const noexcept {
+        return get_kernel().compute_cell_frequency(col, row);
     }
 
     void emit_note_on(int cell_index) {

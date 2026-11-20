@@ -1,4 +1,5 @@
 #include "c74_min.h"
+#include "../../include/wilson_hexslider_kernel.hpp"
 #include <vector>
 #include <cmath>
 #include <unordered_map>
@@ -84,7 +85,7 @@ public:
     }
 
     // Manejo de inlet de velocidad (convención kslider)
-    message<threadcheck::none> int_msg { this, "int", "Recibe número entero para velocidad en inlet 1",
+    message<> int_msg { this, "int", "Recibe número entero para velocidad en inlet 1",
         MIN_FUNCTION {
             if (inlet == 1) {
                 current_velocity = std::clamp(static_cast<int>(args[0]), 0, 127);
@@ -94,7 +95,7 @@ public:
     };
 
     // Mensaje para cargar ratios personalizados (Just Intonation / Wilson CPS)
-    message<threadcheck::none> set_ratios { this, "set_ratios", "Asigna una lista de ratios armónicos para la escala",
+    message<> set_ratios { this, "set_ratios", "Asigna una lista de ratios armónicos para la escala",
         MIN_FUNCTION {
             custom_scale_ratios.clear();
             for (const auto& item : args) {
@@ -111,7 +112,7 @@ public:
     };
 
     // Mensaje de lista plana (recibe directamente la emisión de wilson.core por inlet 0)
-    message<threadcheck::none> list_msg { this, "list", "Recibe lista de ratios armónicos para activar el seam con generadores de afinación",
+    message<> list_msg { this, "list", "Recibe lista de ratios armónicos para activar el seam con generadores de afinación",
         MIN_FUNCTION {
             if (inlet == 0) {
                 custom_scale_ratios.clear();
@@ -150,18 +151,13 @@ public:
             double r = cell_size.get();
             int c_count = cols.get();
             int r_count = rows.get();
-
-            double sqrt3 = 1.732050807568877;
-            double h_spacing = r * 1.5;
-            double v_spacing = r * sqrt3;
+            auto kernel = get_kernel();
 
             int index = 0;
             for (int row = 0; row < r_count; ++row) {
                 for (int col = 0; col < c_count; ++col) {
-                    double cx = col * h_spacing + r;
-                    double cy = row * v_spacing + (col % 2 == 1 ? (v_spacing * 0.5) : 0.0) + (r * sqrt3 * 0.5);
-
-                    draw_hexagon(ctx, cx, cy, r - 1.0, (index == active_cell));
+                    auto center = kernel.get_cell_center(col, row);
+                    draw_hexagon(ctx, center.cx, center.cy, r - 1.0, (index == active_cell));
                     index++;
                 }
             }
@@ -219,35 +215,23 @@ private:
     int current_velocity;
     std::vector<double> custom_scale_ratios;
 
-    double compute_cell_frequency(int col, int row) {
-        // 1. Aplicar desplazamiento de octava sobre la frecuencia fundamental
-        double fundamental = base_freq.get() * std::pow(2.0, static_cast<double>(octave_offset.get()));
+    harmos::kernels::wilson::HexsliderKernel get_kernel() const noexcept {
+        harmos::kernels::wilson::HexsliderKernel k;
+        k.cols = cols.get();
+        k.rows = rows.get();
+        k.cell_size = cell_size.get();
+        k.base_freq = base_freq.get();
+        k.octave_offset = octave_offset.get();
+        k.temperament_mode = std::string(c74::min::symbol(temperament_mode.get()));
+        k.edo_divisions = edo_divisions.get();
+        k.step_x = step_x.get();
+        k.step_y = step_y.get();
+        k.custom_scale_ratios = custom_scale_ratios;
+        return k;
+    }
 
-        // 2. Coordenada relativa en pasos armónicos según los ejes 2D del teclado
-        int step_count = col * step_x.get() + row * step_y.get();
-
-        // 3. Modo EDO (Equal Temperament: 12, 19, 31, 41, 53, etc.)
-        if (temperament_mode.get() == c74::min::symbol("edo")) {
-            double divisions = edo_divisions.get();
-            if (divisions <= 0.0) divisions = 12.0;
-            return fundamental * std::pow(2.0, static_cast<double>(step_count) / divisions);
-        }
-
-        // 4. Modo Ratios / Just Intonation / Wilson CPS
-        if (!custom_scale_ratios.empty()) {
-            int scale_size = static_cast<int>(custom_scale_ratios.size());
-            int octave_shift = step_count / scale_size;
-            int ratio_idx = step_count % scale_size;
-            if (ratio_idx < 0) {
-                ratio_idx += scale_size;
-                octave_shift -= 1;
-            }
-            double ratio = custom_scale_ratios[ratio_idx];
-            return fundamental * ratio * std::pow(2.0, static_cast<double>(octave_shift));
-        }
-
-        // Fallback por defecto: 12-EDO tradicional
-        return fundamental * std::pow(2.0, static_cast<double>(step_count) / 12.0);
+    double compute_cell_frequency(int col, int row) const noexcept {
+        return get_kernel().compute_cell_frequency(col, row);
     }
 
     void draw_hexagon(target& ctx, double cx, double cy, double radius, bool is_active) {
@@ -270,29 +254,8 @@ private:
         ctx.stroke(color{0.05, 0.05, 0.07, 1.0});
     }
 
-    int hit_test(double x, double y) {
-        double r = cell_size.get();
-        int c_count = cols.get();
-        int r_count = rows.get();
-        double sqrt3 = 1.732050807568877;
-        double h_spacing = r * 1.5;
-        double v_spacing = r * sqrt3;
-
-        int index = 0;
-        for (int row = 0; row < r_count; ++row) {
-            for (int col = 0; col < c_count; ++col) {
-                double cx = col * h_spacing + r;
-                double cy = row * v_spacing + (col % 2 == 1 ? (v_spacing * 0.5) : 0.0) + (r * sqrt3 * 0.5);
-
-                double dx = x - cx;
-                double dy = y - cy;
-                if ((dx * dx + dy * dy) <= (r * r * 0.85)) {
-                    return index;
-                }
-                index++;
-            }
-        }
-        return -1;
+    int hit_test(double x, double y) const noexcept {
+        return get_kernel().hit_test(x, y);
     }
 
     void emit_note_on(int cell_index) {
