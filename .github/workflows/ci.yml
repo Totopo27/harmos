@@ -32,10 +32,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Set up MSVC (Windows only)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Run Harmos Guardrail (Tests + Schemas + Privacy)
         run: python scripts/check.py
 
