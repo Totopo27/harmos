@@ -7,6 +7,8 @@ import unittest
 import tempfile
 import os
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 from core.compiler.cpp_generator import generate_cpp_kernel, generate_min_wrapper
@@ -101,6 +103,90 @@ class TestCppGenerator(unittest.TestCase):
         self.assertIn("class WilsonKernel", content)
         self.assertIn("reduce_to_octave", content)
         self.assertIn("get_combinations", content)
+
+
+def _find_cpp_compiler():
+    """Localiza un compilador C++ del host. Sin compilador no se certifica nada."""
+    for candidate in ("g++", "clang++"):
+        path = shutil.which(candidate)
+        if path:
+            return path
+    return None
+
+
+class TestCppIdentifierSafety(unittest.TestCase):
+    """Un nombre de atributo del IR no tiene por que ser un identificador C++ valido."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.dir_path = Path(self.temp_dir.name)
+        self.compiler = _find_cpp_compiler()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _base_ir(self, attributes):
+        return {
+            "object_name": "ident.probe",
+            "category": "control",
+            "target_runtime": "cpp_min_devkit",
+            "inlets": [{"id": 0, "type": "float", "description": "in"}],
+            "outlets": [{"id": 0, "type": "float", "description": "out"}],
+            "attributes": attributes,
+        }
+
+    def _assert_kernel_compiles(self, kernel_src, class_name):
+        if not self.compiler:
+            self.skipTest("Sin compilador C++ (g++/clang++) no se certifica la compilacion.")
+        header = self.dir_path / "probe_kernel.hpp"
+        header.write_text(kernel_src, encoding="utf-8")
+        main_src = self.dir_path / "probe_main.cpp"
+        main_src.write_text(
+            f'#include "{header.name}"\n'
+            f"int main() {{ harmos::kernels::{class_name}Kernel k; (void)k; return 0; }}\n",
+            encoding="utf-8",
+        )
+        proc = subprocess.run(
+            [self.compiler, "-std=c++17", "-fsyntax-only", str(main_src)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0, f"El kernel generado no compila:\n{proc.stderr}")
+
+    def test_dashed_attribute_emits_compilable_kernel(self):
+        ir = self._base_ir([{"name": "cut-off", "type": "float", "default": 0.7}])
+        kernel_src = generate_cpp_kernel(ir)
+
+        self.assertNotIn("cut-off", kernel_src)
+        self.assertIn("double cut_off{0.7};", kernel_src)
+        self._assert_kernel_compiles(kernel_src, "ident_probe")
+
+    def test_keyword_attribute_gets_deterministic_suffix(self):
+        ir = self._base_ir([{"name": "class", "type": "float", "default": 1.0}])
+        kernel_src = generate_cpp_kernel(ir)
+
+        self.assertIn("double class_{1.0};", kernel_src)
+        self._assert_kernel_compiles(kernel_src, "ident_probe")
+
+    def test_wrapper_preserves_original_max_attribute_name(self):
+        ir = self._base_ir([{"name": "cut-off", "type": "float", "default": 0.7}])
+        wrapper = generate_min_wrapper(ir, "ident_probe_kernel.hpp")
+
+        self.assertIn('cut_off { this, "cut-off", 0.7,', wrapper)
+        self.assertIn("m_kernel.cut_off =", wrapper)
+
+    def test_collision_after_normalization_is_an_explicit_error(self):
+        ir = self._base_ir([
+            {"name": "cut-off", "type": "float", "default": 0.5},
+            {"name": "cut_off", "type": "float", "default": 0.5},
+        ])
+
+        with self.assertRaises(ValueError) as ctx:
+            generate_cpp_kernel(ir)
+
+        message = str(ctx.exception)
+        self.assertIn("cut-off", message)
+        self.assertIn("cut_off", message)
 
 
 if __name__ == "__main__":

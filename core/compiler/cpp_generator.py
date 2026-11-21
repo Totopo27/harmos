@@ -5,6 +5,69 @@ Prerrequisito arquitectónico para el oráculo semántico headless:
 - Wrapper Min-Devkit ({object}.cpp): Capa delgada que mapea inlets, outlets y atributos al kernel.
 """
 from typing import Dict, Any, List
+import re
+
+
+# Keywords de C++ que no pueden usarse como nombre de miembro.
+_CPP_KEYWORDS = frozenset({
+    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool",
+    "break", "case", "catch", "char", "char8_t", "char16_t", "char32_t", "class",
+    "compl", "concept", "const", "consteval", "constexpr", "constinit", "const_cast",
+    "continue", "co_await", "co_return", "co_yield", "decltype", "default", "delete",
+    "do", "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern",
+    "false", "float", "for", "friend", "goto", "if", "inline", "int", "long",
+    "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator",
+    "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast",
+    "requires", "return", "short", "signed", "sizeof", "static", "static_assert",
+    "static_cast", "struct", "switch", "template", "this", "thread_local", "throw",
+    "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using",
+    "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq",
+})
+
+_IDENTIFIER_UNSAFE = re.compile(r"[^0-9A-Za-z_]")
+
+
+def cpp_identifier(name: str) -> str:
+    """
+    Normaliza un nombre del IR a un identificador C++ valido y determinista.
+
+    El nombre original se conserva alli donde Max lo muestra (atributos del
+    Inspector): esto solo decide como se llama la variable en C++.
+    """
+    raw = "" if name is None else str(name).strip()
+    identifier = _IDENTIFIER_UNSAFE.sub("_", raw)
+    if not identifier:
+        raise ValueError(
+            f"El nombre '{raw}' no produce ningun identificador C++ valido."
+        )
+    if identifier[0].isdigit():
+        identifier = "_" + identifier
+    if identifier in _CPP_KEYWORDS:
+        identifier += "_"
+    return identifier
+
+
+def _attribute_identifiers(attributes: List[Dict[str, Any]]) -> Dict[str, str]:
+    """
+    Mapea cada nombre original de atributo a su identificador C++ unico.
+
+    Dos atributos distintos que normalicen al mismo identificador son un error
+    explicito: nunca se elige uno en silencio.
+    """
+    mapping: Dict[str, str] = {}
+    owners: Dict[str, str] = {}
+    for attr in attributes:
+        original = str(attr.get("name", "param"))
+        identifier = cpp_identifier(original)
+        previous = owners.get(identifier)
+        if previous is not None:
+            raise ValueError(
+                f"Colision de identificadores C++: '{previous}' y '{original}' "
+                f"normalizan ambos a '{identifier}'."
+            )
+        owners[identifier] = original
+        mapping[original] = identifier
+    return mapping
 
 
 def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
@@ -13,9 +76,10 @@ def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
     No incluye librerías de Cycling '74 ni cabeceras propietarias.
     """
     object_name = ir.get("object_name", "my_object")
-    safe_class_name = object_name.replace(".", "_")
+    safe_class_name = cpp_identifier(object_name)
     category = ir.get("category", "control")
     attributes = ir.get("attributes", [])
+    attribute_ids = _attribute_identifiers(attributes)
     inlets = ir.get("inlets", [])
     outlets = ir.get("outlets", [])
 
@@ -40,7 +104,7 @@ def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
     # Miembros de atributos con tipos C++ estándar
     lines.append("    // Atributos y parametros de estado")
     for attr in attributes:
-        attr_name = attr.get("name", "param")
+        attr_name = attribute_ids[str(attr.get("name", "param"))]
         attr_type = attr.get("type", "double")
         if attr_type == "float":
             cpp_type = "double"
@@ -99,11 +163,12 @@ def generate_min_wrapper(ir: Dict[str, Any], kernel_header_name: str) -> str:
     Solo se encarga de los puertos (inlets/outlets) y mensajería de Max.
     """
     object_name = ir.get("object_name", "my_object")
-    safe_class_name = object_name.replace(".", "_")
+    safe_class_name = cpp_identifier(object_name)
     category = ir.get("category", "control")
     inlets = ir.get("inlets", [])
     outlets = ir.get("outlets", [])
     attributes = ir.get("attributes", [])
+    attribute_ids = _attribute_identifiers(attributes)
 
     is_dsp = (category == "dsp")
 
@@ -144,11 +209,12 @@ def generate_min_wrapper(ir: Dict[str, Any], kernel_header_name: str) -> str:
 
     # Atributos vinculados al kernel
     for attr in attributes:
-        attr_name = attr.get("name", "param")
+        original_name = str(attr.get("name", "param"))
+        attr_name = attribute_ids[original_name]
         attr_type = attr.get("type", "float")
         attr_def = attr.get("default", 0.0 if attr_type == "float" else 0)
         attr_desc = attr.get("description", "Param")
-        lines.append(f'    attribute<{attr_type}> {attr_name} {{ this, "{attr_name}", {attr_def},')
+        lines.append(f'    attribute<{attr_type}> {attr_name} {{ this, "{original_name}", {attr_def},')
         lines.append(f'        description {{"{attr_desc}"}},')
         lines.append(f'        setter {{ MIN_FUNCTION {{')
         lines.append(f'            m_kernel.{attr_name} = static_cast<double>(args[0]);')
