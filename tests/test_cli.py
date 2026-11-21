@@ -58,10 +58,12 @@ class TestHarmosCLI(unittest.TestCase):
         maxpat_path = result["maxpat_path"]
         cpp_path = result["cpp_path"]
         cmake_path = result["cmake_path"]
+        maxref_path = result["maxref_path"]
 
         self.assertTrue(os.path.exists(maxpat_path))
         self.assertTrue(os.path.exists(cpp_path))
         self.assertTrue(os.path.exists(cmake_path))
+        self.assertTrue(os.path.exists(maxref_path))
 
         # 2. Comprobar la validez del patcher de prueba generado
         with open(maxpat_path, "r", encoding="utf-8") as f:
@@ -257,7 +259,36 @@ class TestHarmosCLI(unittest.TestCase):
         self.assertEqual(res_cpp_diff.returncode, 0, f"cpp diff failed: {res_cpp_diff.stderr}")
         self.assertIn("HARMOS ORACLE DIFF: PASS (SEMANTIC)", res_cpp_diff.stdout)
 
+    def test_cli_doc_subcommand_end_to_end(self):
+        sample_ir = {
+            "object_name": "harmos.doc_test",
+            "category": "control",
+            "inlets": [{"id": 0, "type": "int", "description": "Trigger"}],
+            "outlets": [{"id": 0, "type": "float", "description": "Output"}],
+            "attributes": [{"name": "speed", "type": "float", "default": 1.0, "description": "Playback speed"}]
+        }
+        ir_path = os.path.join(self.temp_dir, "doc_test.ir.json")
+        with open(ir_path, "w", encoding="utf-8") as f:
+            json.dump(sample_ir, f)
 
+        doc_out = os.path.join(self.temp_dir, "docs", "harmos.doc_test.maxref.xml")
+
+        import subprocess
+        import sys
+        cmd = [
+            sys.executable, "-m", "core.compiler.cli", "doc",
+            ir_path,
+            "--out", doc_out
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, f"doc command failed: {res.stderr}")
+        self.assertTrue(os.path.isfile(doc_out))
+        self.assertIn("Documentacion Maxref generada con exito", res.stdout)
+
+        with open(doc_out, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("<c74object name='harmos.doc_test'", content)
+        self.assertIn("<attribute name='speed'", content)
 
 
 if __name__ == "__main__":
