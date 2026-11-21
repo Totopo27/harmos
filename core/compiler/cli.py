@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional
 from core.compiler.typed_patch import TypedPatch
 from core.compiler.ast_extractor import extract_ir_from_file
 from core.compiler.cpp_generator import generate_cpp_kernel, generate_min_wrapper
+from core.compiler.maxref_generator import write_maxref_file
 from core.compiler.oracle_harvest import (
     TestCase,
     write_cases_jsonl,
@@ -268,6 +269,25 @@ def generate_test_maxpat(ir: Dict[str, Any], output_path: str) -> None:
     patch.save(output_path)
 
 
+def handle_doc(
+    ir_file_path: str,
+    output_path: Optional[str] = None,
+    author: str = "Harmos Meta-Compiler"
+) -> str:
+    """Extrae la especificación IR y sintetiza la documentación canónica .maxref.xml."""
+    with open(ir_file_path, "r", encoding="utf-8") as f:
+        ir_data = json.load(f)
+    object_name = ir_data.get("object_name", "harmos_object")
+    if not output_path:
+        output_path = f"{object_name}.maxref.xml"
+    elif os.path.isdir(output_path) or output_path.endswith("/") or output_path.endswith("\\"):
+        output_path = os.path.join(output_path, f"{object_name}.maxref.xml")
+    elif not output_path.endswith(".xml"):
+        output_path = os.path.join(output_path, f"{object_name}.maxref.xml")
+
+    return write_maxref_file(ir_data, output_path, author=author)
+
+
 def compile_ir(
     ir_file_path: str,
     output_dir: str,
@@ -286,9 +306,15 @@ def compile_ir(
     kernel_path = os.path.join(output_dir, f"{object_name}_kernel.hpp")
     cmake_path = os.path.join(output_dir, "CMakeLists.txt")
 
+    docs_dir = os.path.join(output_dir, "docs")
+    maxref_path = os.path.join(docs_dir, f"{object_name}.maxref.xml")
+    flat_maxref_path = os.path.join(output_dir, f"{object_name}.maxref.xml")
+
     generate_test_maxpat(ir_data, maxpat_path)
     generate_cpp_min_devkit(ir_data, cpp_path, kernel_path=kernel_path)
     generate_cmakelists(object_name, cmake_path, min_api_dir=min_api_dir)
+    write_maxref_file(ir_data, maxref_path)
+    write_maxref_file(ir_data, flat_maxref_path)
 
     external_path: Optional[str] = None
     if build:
@@ -300,6 +326,7 @@ def compile_ir(
         "cpp": cpp_path,
         "kernel": kernel_path,
         "cmake": cmake_path,
+        "maxref": maxref_path,
     }
     if external_path and os.path.exists(external_path):
         artifacts["external"] = external_path
@@ -318,6 +345,7 @@ def compile_ir(
         "cpp_path": cpp_path,
         "kernel_path": kernel_path,
         "cmake_path": cmake_path,
+        "maxref_path": maxref_path,
         "provenance_path": str(prov_path)
     }
     if external_path:
@@ -367,8 +395,14 @@ def main():
     diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp", "hexslider", "truax"], default="wilson", help="Tipo de arnes C++ a generar")
     diff_parser.add_argument("--kernel-type-name", help="Nombre exacto del tipo C++ (para control/dsp)")
 
+    # Subcomando doc
+    doc_parser = subparsers.add_parser("doc", help="Generar documentacion canonica .maxref.xml a partir de una IR (.ir.json)")
+    doc_parser.add_argument("ir_file", help="Ruta al archivo de especificacion IR (.ir.json)")
+    doc_parser.add_argument("--out", default=None, help="Ruta de destino del archivo .maxref.xml o directorio docs/")
+    doc_parser.add_argument("--author", default="Harmos Meta-Compiler", help="Nombre del autor para metadatos XML")
+
     # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
-    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "harvest", "diff", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "harvest", "diff", "doc", "-h", "--help"]:
         sys.argv.insert(1, "compile")
 
     args = parser.parse_args()
@@ -381,9 +415,13 @@ def main():
             print(f"  Patcher de prueba: {res['maxpat_path']}")
             print(f"  Fuente C++:        {res['cpp_path']}")
             print(f"  CMakeLists:        {res['cmake_path']}")
+            print(f"  Maxref XML:        {res['maxref_path']}")
             print(f"  Procedencia:       {res['provenance_path']}")
             if res.get("external_path"):
                 print(f"  External nativo:   {res['external_path']}")
+        elif args.command == "doc":
+            out_file = handle_doc(args.ir_file, output_path=args.out, author=args.author)
+            print(f"Documentacion Maxref generada con exito: {out_file}")
         elif args.command == "extract":
             res = handle_extract(args.source_file, args.out, object_name=args.name)
             print(f"Extraccion exitosa para: {res['object_name']}")
