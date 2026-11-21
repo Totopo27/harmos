@@ -2,7 +2,7 @@ name: Harmos CI
 
 on:
   push:
-    branches: [ main, "feat/**" ]
+    branches: [ main, "feat/**", "fix/**" ]
   pull_request:
     branches: [ main ]
 
@@ -11,13 +11,17 @@ permissions:
 
 jobs:
   guardrail-and-tests:
-    name: Guardrail & Unit Tests (${{ matrix.os }})
+    name: Guardrail & Unit Tests (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest ]
-        python-version: [ "3.11" ]
+        # 3.11 es el minimo soportado y 3.15 el interprete de desarrollo: se
+        # prueban los dos extremos. Solo el piso deja invisibles las regresiones
+        # que aparecen en versiones nuevas; solo el techo pierde compatibilidad
+        # hacia atras.
+        python-version: [ "3.11", "3.15" ]
 
     steps:
       - name: Checkout repository
