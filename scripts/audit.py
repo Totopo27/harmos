@@ -5,8 +5,13 @@ Automatiza la verificacion en vivo de parches y packages en Cycling '74 Max.
 
 Contrato Operativo (Hard Rules):
 1. Deteccion de runtime Max (Registro de Windows / rutas estandar / MAX_PATH).
-2. Si Max no esta disponible, el veredicto es estrictamente BLOCKED (no PASS).
-3. Si Max esta disponible:
+2. Puertas estaticas: la procedencia y los patchcords se evaluan antes de resolver
+   el runtime, porque solo leen archivos. Un rechazo estatico es FAIL aunque Max no
+   este instalado.
+3. Si las puertas estaticas aprueban y Max no esta disponible, el veredicto es
+   estrictamente BLOCKED (no PASS): BLOCKED significa "falta el runtime", no "no se
+   pudo comprobar nada".
+4. Si Max esta disponible:
    - Aislamiento por sesion de log: Max trunca Max.log en cada arranque, por lo que
      la lectura se ancla al header de sesion y no a offsets de bytes.
    - Ejecucion de Max.exe con el patcher objetivo.
@@ -15,11 +20,11 @@ Contrato Operativo (Hard Rules):
    - Fail-closed: sin sesion propia o sin carga completada el veredicto es BLOCKED.
    - Generacion de evidencia / receipt verificable.
    - Procedencia: si el paquete incluye `emitted-from.json` junto al patcher, se
-     verifica antes de arrancar Max; un veredicto distinto de VALID impide PASS.
-    - Contratos: los patchcords del patcher se validan contra
-      `core/schema/max_contracts.json` antes de arrancar Max; una conexion que el
-      contrato declara ilegal produce FAIL. Se reutiliza la misma puerta que usa
-      el emisor (`ContractEngine`), sin indices de inlet/outlet codificados aqui.
+     verifica antes de los contratos; un veredicto distinto de VALID impide PASS.
+   - Contratos: los patchcords del patcher se validan contra
+     `core/schema/max_contracts.json`; una conexion que el contrato declara ilegal
+     produce FAIL. Se reutiliza la misma puerta que usa el emisor (`ContractEngine`),
+     sin indices de inlet/outlet codificados aqui.
 """
 import sys
 import os
@@ -451,8 +456,9 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     Veredictos posibles: PASS, FAIL, BLOCKED, y los de procedencia
     (STALE_CONTRACTS, STALE_IR, STALE_SOURCE, STALE_ARTIFACTS,
     UNVERIFIABLE, INVALID) cuando el paquete trae emitted-from.json.
-    Antes de arrancar Max se validan los patchcords contra
-    `CONTRACTS_SCHEMA_PATH`: una conexion ilegal produce FAIL sin gastar arranque.
+    Orden: primero las puertas estaticas (procedencia, luego contratos), despues la
+    resolucion del runtime. Una conexion ilegal produce FAIL sin gastar arranque y
+    sin necesitar Max instalado; BLOCKED queda para cuando lo estatico paso.
     """
     # Max no abre rutas relativas: se resuelve a absoluta antes de lanzarlo.
     patcher_path = patcher_path.expanduser().resolve()
@@ -465,16 +471,12 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
             f"El objetivo no es un patcher Max (.maxpat): {patcher_path.name}",
         ]
 
-    max_exe = resolve_max_executable()
-    if not max_exe:
-        return "BLOCKED", [
-            "Max.exe no fue detectado en el sistema.",
-            "Contrato Harmos: Prohibido emitir PASS sin ejecucion en vivo.",
-            "Instale Cycling '74 Max o configure la variable MAX_PATH.",
-        ]
-
-    # Procedencia: se decide antes de arrancar Max. Un paquete obsoleto o alterado
-    # no gasta un arranque del runtime para recibir un PASS que no le corresponde.
+    # Puertas estaticas: procedencia y contratos solo leen archivos, asi que se
+    # deciden antes de resolver el runtime. En un host sin Max un patcher ilegal es
+    # FAIL, no BLOCKED: BLOCKED significa "todo lo estatico paso, falta el runtime".
+    #
+    # Procedencia primero: un paquete emitido contra un esquema anterior conserva su
+    # propio veredicto y no se juzga contra un esquema para el que no fue emitido.
     prov_verdict, prov_details = audit_provenance(patcher_path)
     if prov_verdict is not None and prov_verdict != "VALID":
         return prov_verdict, [
@@ -500,6 +502,15 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
             f"{CONTRACTS_SCHEMA_PATH}.",
             *contract_violations[:20],
             "Corregir el emisor o el IR antes de auditar: no se emite PASS.",
+        ]
+
+    # Recien aqui se requiere el runtime: las puertas estaticas ya aprobaron.
+    max_exe = resolve_max_executable()
+    if not max_exe:
+        return "BLOCKED", [
+            "Max.exe no fue detectado en el sistema.",
+            "Contrato Harmos: Prohibido emitir PASS sin ejecucion en vivo.",
+            "Instale Cycling '74 Max o configure la variable MAX_PATH.",
         ]
 
     # Puede no existir todavia: se re-resuelve durante el sondeo.

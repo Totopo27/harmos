@@ -315,6 +315,42 @@ class TestProvenanceGate(LogFixtureMixin, unittest.TestCase):
 
         self.assertEqual("STALE_CONTRACTS", verdict)
 
+    def test_stale_contracts_wins_over_illegal_cables(self):
+        """
+        La procedencia decide antes que los contratos: un paquete emitido contra
+        un esquema anterior no se juzga contra el actual, aunque sus cables sean
+        ilegales hoy.
+        """
+        result = self._compile_package()
+        patcher = Path(result["maxpat_path"])
+        document = json.loads(patcher.read_text(encoding="utf-8"))
+        container = document["patcher"]
+        container["boxes"].append(
+            {"box": {"id": "obj-illegal-src", "maxclass": "newobj", "text": "cycle~ 440"}}
+        )
+        container["boxes"].append(
+            {"box": {"id": "obj-illegal-dst", "maxclass": "newobj", "text": "mtof"}}
+        )
+        container.setdefault("lines", []).append(
+            {
+                "patchline": {
+                    "source": ["obj-illegal-src", 0],
+                    "destination": ["obj-illegal-dst", 0],
+                }
+            }
+        )
+        patcher.write_text(json.dumps(document), encoding="utf-8")
+
+        prov = Path(result["provenance_path"])
+        record = json.loads(prov.read_text(encoding="utf-8"))
+        record["contracts"]["sha256"] = "0" * 64
+        prov.write_text(json.dumps(record, indent=4), encoding="utf-8")
+
+        verdict, details = self._audit_without_runtime(patcher)
+
+        self.assertEqual("STALE_CONTRACTS", verdict)
+        self.assertFalse(any("Contratos rechazados" in d for d in details), details)
+
     def test_corrupt_provenance_record_is_invalid(self):
         result = self._compile_package()
         Path(result["provenance_path"]).write_text("{oops", encoding="utf-8")
@@ -523,6 +559,86 @@ class TestContractGate(unittest.TestCase):
         self.assertTrue(
             any("Contratos verificados: 1 conexiones" in d for d in details), details
         )
+
+
+class TestStaticGateOrdering(unittest.TestCase):
+    """
+    Las puertas estaticas no dependen del runtime: en un host sin Max un patcher
+    ilegal es FAIL, no BLOCKED. BLOCKED queda reservado a "todo lo estatico paso,
+    falta el runtime".
+    """
+
+    def _write_patcher(self, content, name="gate.maxpat"):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / name
+        if isinstance(content, str):
+            path.write_text(content, encoding="utf-8")
+        else:
+            path.write_text(json.dumps(content), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def _box(box_id, text, maxclass="newobj"):
+        return {"box": {"id": box_id, "maxclass": maxclass, "text": text}}
+
+    @staticmethod
+    def _line(src_id, src_outlet, dest_id, dest_inlet):
+        return {
+            "patchline": {
+                "source": [src_id, src_outlet],
+                "destination": [dest_id, dest_inlet],
+            }
+        }
+
+    def _illegal_document(self):
+        return {
+            "patcher": {
+                "boxes": [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "mtof")],
+                "lines": [self._line("obj-1", 0, "obj-2", 0)],
+            }
+        }
+
+    def _valid_document(self):
+        return {
+            "patcher": {
+                "boxes": [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "gain~")],
+                "lines": [self._line("obj-1", 0, "obj-2", 0)],
+            }
+        }
+
+    def test_illegal_connection_fails_without_max(self):
+        patcher = self._write_patcher(self._illegal_document())
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=None), \
+                mock.patch.object(
+                    audit.subprocess, "Popen",
+                    side_effect=AssertionError("Max.exe no debe lanzarse sin contratos validos"),
+                ):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=1)
+
+        self.assertEqual("FAIL", verdict)
+        self.assertTrue(any("Contratos rechazados" in d for d in details), details)
+        self.assertFalse(any("Max.exe no fue detectado" in d for d in details), details)
+
+    def test_unreadable_patcher_fails_without_max(self):
+        patcher = self._write_patcher("{ esto no es json", name="roto.maxpat")
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=None):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=1)
+
+        self.assertEqual("FAIL", verdict)
+        self.assertTrue(any("no es un documento JSON nativo" in d for d in details), details)
+
+    def test_valid_patcher_without_max_is_still_blocked(self):
+        patcher = self._write_patcher(self._valid_document())
+
+        with mock.patch.object(audit, "resolve_max_executable", return_value=None):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=1)
+
+        self.assertEqual("BLOCKED", verdict)
+        self.assertTrue(any("Max.exe no fue detectado" in d for d in details), details)
+        self.assertTrue(any("MAX_PATH" in d for d in details), details)
 
 
 if __name__ == "__main__":
