@@ -1,0 +1,76 @@
+# CodeRabbit configuration — V2 schema.
+# Reference: https://docs.coderabbit.ai/reference/configuration
+language: en-US
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  sequence_diagrams: false
+  poem: false
+  review_details: true
+
+  auto_review:
+    drafts: false
+
+  # Markdown docs and data artifacts are not reviewed: they are narrative or
+  # generated. Contract schemas (core/schema/*.json) stay reviewed on purpose.
+  path_filters:
+    - "!**/*.md"
+    - "!**/*.jsonl"
+    - "!**/*_ir.json"
+    - "!catalog/**"
+
+  path_instructions:
+    - path: "core/**"
+      instructions: |
+        Harmos core is a domain-agnostic meta-compiler. Enforce the repository rules:
+        - Zero hardcoding: inlet/outlet numbers and Max types must be resolved through
+          `core/schema/max_contracts.json` or `core/compiler/contract_engine.py`.
+          Flag any literal or assumed index/type.
+        - Keep the engine domain-agnostic. Framework code must not embed suite-specific
+          logic (see `docs/adr/0001-separacion-motor-y-benchmarks.md`).
+        - Flag any change that weakens the contract/provenance validation path.
+
+    - path: "benchmarks/**"
+      instructions: |
+        Benchmarks are stress-test suites for the engine, not part of the framework.
+        For C++ (Max SDK Min-Devkit externals), realtime audio constraints apply: flag
+        heap allocation, locks, or blocking I/O inside the audio thread.
+        A runtime audit may only be reported as PASS when `python scripts/audit.py`
+        actually ran; otherwise it must be `BLOCKED (RUNTIME_UNAVAILABLE)`.
+
+    - path: "scripts/**"
+      instructions: |
+        This directory holds the guardrail. `python scripts/check.py` must stay green
+        (tests + schemas + privacy). Privacy rule: flag any introduced absolute host
+        path or local `*.ps1` script.
+
+  pre_merge_checks:
+    title:
+      mode: warning
+    description:
+      mode: warning
+    custom_checks:
+      - name: "Guardrail evidence"
+        mode: warning
+        instructions: |
+          If the PR changes files under `core/`, `scripts/`, or `tests/`, the description
+          must state the observed result of `python scripts/check.py`.
+          Missing evidence fails this check.
+
+  tools:
+    ruff:
+      enabled: true
+    pylint:
+      enabled: false
+    # C/C++ static analysis is disabled: the Max SDK headers are not vendored here,
+    # so clang/cppcheck would report missing-include noise instead of real defects.
+    clang:
+      enabled: false
+    cppcheck:
+      enabled: false
+    markdownlint:
+      enabled: false
+    # Docs are authored in Spanish; prose linting adds noise, not signal.
+    languagetool:
+      enabled: false
