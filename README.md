@@ -69,19 +69,14 @@ Código fuente externo (C++, Python, JS, Rust)
 ```
 harmos/
 ├── core/
-│   └── schema/              # Contratos formales de tipos (max_contracts.json, max_object_ir.json)
+│   ├── compiler/            # Pipeline determinista: CLI, TypedPatch, ContractEngine, C++ & Maxref generators
+│   └── schema/              # Contratos formales de tipos (max_contracts.json, max_object_ir.schema.json)
 ├── meta-skills/             # Orquestadores agnósticos del pipeline Harmos
-│   ├── max-project-scout/   # Auditoría y extracción de arquitectura previa
-│   ├── max-skill-factory/   # Generador de skills bajo el estándar LLM-first
-│   ├── max-catalog-matcher/ # Mapeo contra primitivas de Cycling '74
-│   ├── max-patch-validator/ # Linteo estricto de inlets, outlets y cables
-│   └── max-live-verifier/   # Automatización en vivo y parsing de Max.log
-├── skills/                  # Herramientas de soporte y ejemplos generados
-│   ├── maxpylang/           # Generación programática reproducible de patchers en Python
-│   ├── ersatzben-maxmsp-mcp/# Control e inspección en caliente vía protocolo MCP
-│   └── evidence-investigation/ # Protocolo de diagnóstico de código basado en evidencia
+│   ├── max-transpiler-scout/# Auditoría estática y extracción políglota de IR
+│   └── max-runtime-gatekeeper/ # Verificación en caliente de Max.exe y oráculo semántico
 ├── catalog/                 # Primitivas indexadas y arquetipos de interfaz
 ├── templates/               # Plantillas base C++ Min-Devkit, CMake y Node for Max
+├── scripts/                 # Guardrails de calidad (check.py, audit.py, bench.py)
 └── benchmarks/              # Suites de prueba y casos piloto para validar el motor
 ```
 
