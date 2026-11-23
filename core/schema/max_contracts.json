@@ -1,11 +1,19 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "MaxObjectContractRules",
   "description": "Especificación estricta de contratos de entradas y salidas de Max MSP para generación dinámica sin hardcoding.",
   "objects": {
     "comment": {
       "inlets": {},
       "outlets": {}
+    },
+    "number": {
+      "inlets": {
+        "0": { "name": "value_or_message", "type": "int/float/bang", "aliases": ["input", "in"] }
+      },
+      "outlets": {
+        "0": { "name": "value", "type": "int", "aliases": ["out"] },
+        "1": { "name": "tab", "type": "bang" }
+      }
     },
     "flonum": {
       "inlets": {
@@ -49,6 +57,20 @@
         "1": { "name": "audio_right", "type": "signal" }
       },
       "outlets": []
+    },
+    "dac~": {
+      "inlets": {
+        "0": { "name": "audio_left", "type": "signal", "aliases": ["left", "ch1"] },
+        "1": { "name": "audio_right", "type": "signal", "aliases": ["right", "ch2"] }
+      },
+      "outlets": []
+    },
+    "adc~": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "audio_left", "type": "signal", "aliases": ["left", "ch1"] },
+        "1": { "name": "audio_right", "type": "signal", "aliases": ["right", "ch2"] }
+      }
     },
     "notein": {
       "inlets": {
@@ -525,6 +547,89 @@
         "0": { "name": "pairs_list", "type": "list", "format": "[i, partner, ...]" },
         "1": { "name": "fixed_points", "type": "list", "format": "[fixed_note...]" },
         "2": { "name": "symmetry_count", "type": "int" }
+      }
+    },
+    "metro": {
+      "inlets": {
+        "0": { "name": "toggle_on_off", "type": "int/bang", "aliases": ["toggle", "enable"] },
+        "1": { "name": "interval_ms", "type": "float/int", "aliases": ["time", "interval"] }
+      },
+      "outlets": {
+        "0": { "name": "ticks", "type": "bang", "aliases": ["bang", "output"] }
+      }
+    },
+    "toggle": {
+      "inlets": {
+        "0": { "name": "state_or_bang", "type": "int/bang", "aliases": ["input"] }
+      },
+      "outlets": {
+        "0": { "name": "state", "type": "int", "aliases": ["value", "output"] }
+      }
+    },
+    "button": {
+      "inlets": {
+        "0": { "name": "trigger_bang", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": {
+        "0": { "name": "bang_out", "type": "bang", "aliases": ["output", "bang"] }
+      }
+    },
+    "select": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "anything", "aliases": ["input"] },
+        "1": { "name": "compare_value", "type": "anything", "aliases": ["compare"] }
+      },
+      "outlets": {
+        "0": { "name": "match_bang", "type": "bang", "aliases": ["match"] },
+        "1": { "name": "nomatch_value", "type": "anything", "aliases": ["nomatch", "unmatched"] }
+      }
+    },
+    "gate": {
+      "inlets": {
+        "0": { "name": "open_close_or_outlet_select", "type": "int", "aliases": ["control", "select"] },
+        "1": { "name": "input_message", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": {
+        "0": { "name": "routed_output", "type": "anything", "aliases": ["output"] }
+      }
+    },
+    "snapshot~": {
+      "inlets": {
+        "0": { "name": "signal_in", "type": "signal", "aliases": ["signal"] },
+        "1": { "name": "trigger_sample", "type": "bang", "aliases": ["sample", "trigger"] }
+      },
+      "outlets": {
+        "0": { "name": "sampled_float", "type": "float", "aliases": ["value", "output"] }
+      }
+    },
+    "print": {
+      "inlets": {
+        "0": { "name": "message_to_print", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": []
+    },
+    "send": {
+      "inlets": {
+        "0": { "name": "message_to_send", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": []
+    },
+    "s": {
+      "inlets": {
+        "0": { "name": "message_to_send", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": []
+    },
+    "receive": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "received_message", "type": "anything", "aliases": ["output"] }
+      }
+    },
+    "r": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "received_message", "type": "anything", "aliases": ["output"] }
       }
     }
   }

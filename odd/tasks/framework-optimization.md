@@ -35,7 +35,7 @@ refactorización arquitectónica, contratos estrictos, calidad de tests y docume
 
 ## Tasks
 
-- [ ] T1 (S1-S6) [inline]: Fase 1 — Cimientos Críticos: Validación bidireccional en assess_connection, aridad dinámica en ContractEngine, corrección de zero-hardcoding en tests, tests herméticos/deterministas y compuerta de auditoría en patchers sintetizados.
+- [x] T1 (S1-S6) [inline]: Fase 1 — Cimientos Críticos: Validación bidireccional en assess_connection, aridad dinámica en ContractEngine, corrección de zero-hardcoding en tests, tests herméticos/deterministas y compuerta de auditoría en patchers sintetizados. Commit: c4e8281
 - [ ] T2 (S7-S12) [inline]: Fase 2 — Endurecimiento de Esquemas y Contratos: Corrección de puertos trigger/gain~/coll/scale, uniones signal/float, validación de IR, lookup O(1) pre-normalizado, primitivas base y diagnósticos unificados.
 - [ ] T3 (S13-S17) [inline]: Fase 3 — Robustecimiento de CI/CD y Scripts: Blindaje fail-closed de check.py, audit.py multiplataforma, bench.py, integración de ruff/mypy/coverage en CI y pipeline E2E.
 - [ ] T4 (S18-S23) [inline]: Fase 4 — Refactorización y Separación de Dominios: Desacoplamiento de kernels downstream de cpp_headless_runner, modularización de funciones monolíticas, lazy evaluation en microtonal_engine, optimización de benchmarking y eliminación de dead code.

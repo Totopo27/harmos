@@ -83,12 +83,12 @@ class TestContractEngine(unittest.TestCase):
         # 1. Señal de audio hacia inlet de control puro (route inlet 0 es anything) -> INVALID
         res_sig_ctrl = self.engine.assess_connection("cycle~", 0, "route", 0)
         self.assertEqual(res_sig_ctrl.status, "INVALID")
-        self.assertIn("señal de audio", res_sig_ctrl.reason)
+        self.assertIn("audio signal", res_sig_ctrl.reason)
 
         # 2. Control puro hacia inlet exclusivo de señal (ezdac~ audio in) -> INVALID
         res_ctrl_sig = self.engine.assess_connection("midiformat", 0, "ezdac~", 0)
         self.assertEqual(res_ctrl_sig.status, "INVALID")
-        self.assertIn("exclusivo de señal", res_ctrl_sig.reason)
+        self.assertIn("signal-only inlet", res_ctrl_sig.reason)
 
         # 3. Control compatible hacia inlet con unión señal/control (cycle~ inlet 0 acepta signal/float) -> VALID
         res_num_cycle = self.engine.assess_connection("mtof", 0, "cycle~", 0)
@@ -108,6 +108,12 @@ class TestContractEngine(unittest.TestCase):
 
     def test_from_ir_overlay(self):
         """from_ir debe superponer temporalmente el contrato del objeto generado."""
+        # Validación de estructura de IR
+        with self.assertRaises(ValueError):
+            ContractEngine.from_ir({})
+        with self.assertRaises(ValueError):
+            ContractEngine.from_ir({"object_name": "missing_ports"})
+
         ir = {
             "object_name": "custom.filter~",
             "inlets": [
@@ -130,6 +136,40 @@ class TestContractEngine(unittest.TestCase):
 
         # El motor original no debe estar afectado
         self.assertIsNone(self.engine.get_object_contract("custom.filter~"))
+
+    def test_standard_max_primitives(self):
+        """Verifica que las primitivas base añadidas (dac~, adc~, metro, toggle, number, etc.) estén disponibles."""
+        # number
+        self.assertEqual(len(self.engine.get_inlets("number")), 1)
+        self.assertEqual(len(self.engine.get_outlets("number")), 2)
+
+        # dac~ y adc~
+        self.assertEqual(len(self.engine.get_inlets("dac~")), 2)
+        self.assertEqual(len(self.engine.get_outlets("dac~")), 0)
+        self.assertEqual(len(self.engine.get_inlets("adc~")), 0)
+        self.assertEqual(len(self.engine.get_outlets("adc~")), 2)
+
+        # metro, toggle, button
+        self.assertEqual(len(self.engine.get_inlets("metro")), 2)
+        self.assertEqual(len(self.engine.get_outlets("metro")), 1)
+        self.assertEqual(len(self.engine.get_inlets("toggle")), 1)
+        self.assertEqual(len(self.engine.get_outlets("toggle")), 1)
+        self.assertEqual(len(self.engine.get_inlets("button")), 1)
+        self.assertEqual(len(self.engine.get_outlets("button")), 1)
+
+        # select, gate, snapshot~
+        self.assertEqual(len(self.engine.get_inlets("select")), 2)
+        self.assertEqual(len(self.engine.get_outlets("select")), 2)
+        self.assertEqual(len(self.engine.get_inlets("gate")), 2)
+        self.assertEqual(len(self.engine.get_outlets("gate")), 1)
+        self.assertEqual(len(self.engine.get_inlets("snapshot~")), 2)
+        self.assertEqual(len(self.engine.get_outlets("snapshot~")), 1)
+
+        # Conexión válida de metro -> button -> toggle
+        res1 = self.engine.assess_connection("metro", 0, "button", 0)
+        self.assertEqual(res1.status, "VALID")
+        res2 = self.engine.assess_connection("button", 0, "toggle", 0)
+        self.assertEqual(res2.status, "VALID")
 
     def test_resolve_outlet_index(self):
         """resolve_outlet_index debe encontrar índices por nombre y alias."""

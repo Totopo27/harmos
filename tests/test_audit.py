@@ -172,7 +172,6 @@ class FakeProc:
 
 class TestAuditPatcherLive(LogFixtureMixin, unittest.TestCase):
     def _run(self, lines, timeout=3):
-        patcher = Path(self.id().replace(".", "_") + ".maxpat")
         handle = tempfile.NamedTemporaryFile("w", suffix=".maxpat", delete=False, encoding="utf-8")
         handle.write("{}")
         handle.close()
@@ -459,7 +458,7 @@ class TestContractGate(unittest.TestCase):
 
         self.assertEqual(1, checked)
         self.assertEqual(1, len(violations))
-        self.assertTrue(any("inlet de control" in v for v in violations), violations)
+        self.assertTrue(any("control inlet" in v.lower() for v in violations), violations)
 
     def test_connection_into_comment_box_is_rejected(self):
         patcher = self._write_patcher(
