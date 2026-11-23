@@ -52,6 +52,10 @@ class TestForbiddenPatterns(unittest.TestCase):
         self.assertIn(".yml", SCANNED_EXTENSIONS)
         self.assertIn(".yaml", SCANNED_EXTENSIONS)
 
+    def test_detects_macos_user_profile(self):
+        sample = "export PATH=" + FORWARD_SLASH + "Users" + FORWARD_SLASH + "developer" + FORWARD_SLASH + "bin"
+        self.assertTrue(_matches(sample))
+
 class TestContractStructureCheck(unittest.TestCase):
     def test_parseable_json_is_not_sufficient_contract_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:

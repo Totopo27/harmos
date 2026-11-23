@@ -11,13 +11,13 @@ permissions:
 
 jobs:
   guardrail-and-tests:
-    name: Guardrail & Unit Tests (${{ matrix.os }})
+    name: Guardrail & Tests (${{ matrix.os }}, Py ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        python-version: [ "3.11" ]
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        python-version: [ "3.11", "3.12" ]
 
     steps:
       - name: Checkout repository
@@ -27,6 +27,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy coverage jsonschema
 
       - name: Set up MSVC (Windows only)
         if: runner.os == 'Windows'
@@ -35,6 +41,15 @@ jobs:
       - name: Run Harmos Guardrail (Tests + Schemas + Privacy)
         run: python scripts/check.py
 
+      - name: Run Static Code Quality (Ruff)
+        run: |
+          ruff check core/ scripts/ tests/ --ignore E501,F401,F841 || true
+
+      - name: Run Test Coverage (Coverage.py)
+        run: |
+          coverage run -m unittest discover tests
+          coverage report --include="core/*,scripts/*"
+
       - name: Harvest Wilson test cases
         run: |
           python -m core.compiler.cli harvest --suite wilson --out cases_wilson.jsonl
@@ -42,3 +57,11 @@ jobs:
       - name: Run Headless C++ Semantic Differential Oracle
         run: |
           python -m core.compiler.cli diff cases_wilson.jsonl --cpp-kernel benchmarks/teclados-wilson/wilson_kernel.hpp --kernel-class wilson
+
+      - name: Run End-to-End IR to Max Package Compilation
+        run: |
+          python -m core.compiler.cli benchmarks/midiControl/micro_mpe_ir.json --out build_e2e/micro_mpe_pkg
+
+      - name: Run Performance Budget Benchmark
+        run: |
+          python scripts/bench.py --json

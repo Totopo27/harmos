@@ -23,7 +23,8 @@ from core.compiler.contract_engine import validate_contracts
 FORBIDDEN_PATTERNS = [
     (r"(?<![A-Za-z])C:[\\/]Users[\\/]", "Ruta de usuario Windows"),
     (r"(?<![A-Za-z])[A-Za-z]:[\\/]", "Ruta absoluta con letra de unidad Windows"),
-    (r"/home/[a-zA-Z0-9_-]+/", "Ruta absoluta de usuario Linux/macOS"),
+    (r"/home/[a-zA-Z0-9_-]+/", "Ruta absoluta de usuario Linux"),
+    (r"/Users/[a-zA-Z0-9_-]+/", "Ruta absoluta de usuario macOS"),
     (r"ghp_[a-zA-Z0-9]{20,}", "GitHub Personal Access Token"),
     (r"gho_[a-zA-Z0-9]{20,}", "GitHub OAuth Token"),
 ]
@@ -37,7 +38,12 @@ SCANNED_EXTENSIONS = [".md", ".py", ".json", ".cpp", ".hpp", ".txt", ".cmake", "
 
 def run_unit_tests() -> bool:
     print("[1/3] Ejecutando suite de tests unitarios...")
-    result = subprocess.run([sys.executable, "-m", "unittest", "discover", "tests"], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "tests"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True
+    )
     if result.returncode == 0:
         print("  OK Tests unitarios: 100% pasando.")
         return True
@@ -48,8 +54,10 @@ def run_unit_tests() -> bool:
         return False
 
 
-def validate_json_schemas(schema_dir: Path = Path("core/schema")) -> bool:
+def validate_json_schemas(schema_dir: Path = None) -> bool:
     """Check syntax and supported catalog shape, not full Draft-07 conformance."""
+    if schema_dir is None:
+        schema_dir = _REPO_ROOT / "core" / "schema"
     print("[2/3] Validando sintaxis JSON y estructura del catalogo de contratos...")
     if not schema_dir.exists():
         print("  FAIL: Directorio core/schema no encontrado.")
@@ -79,16 +87,16 @@ def validate_json_schemas(schema_dir: Path = Path("core/schema")) -> bool:
 def scan_for_leaks_and_pii() -> bool:
     print("[3/3] Escaneando arbol git en busca de PII, rutas de host o secretos...")
     
-    result = subprocess.run(["git", "ls-files"], capture_output=True, text=True)
+    result = subprocess.run(["git", "ls-files"], cwd=_REPO_ROOT, capture_output=True, text=True)
     if result.returncode != 0:
-        print("  WARN: No se pudo ejecutar git ls-files. Saltando chequeo.")
-        return True
+        print("  FAIL: No se pudo ejecutar git ls-files. Escaneo de privacidad falló de forma estricta (fail-closed).")
+        return False
 
     files = result.stdout.strip().splitlines()
     has_leaks = False
 
     for file_path in files:
-        path_obj = Path(file_path)
+        path_obj = _REPO_ROOT / file_path
 
         # 1. Chequeo de extension prohibida
         if path_obj.suffix.lower() in BANNED_EXTENSIONS:
@@ -96,9 +104,9 @@ def scan_for_leaks_and_pii() -> bool:
             has_leaks = True
 
         # 2. Chequeo de contenido en archivos de texto
-        if path_obj.suffix.lower() in SCANNED_EXTENSIONS:
+        if path_obj.suffix.lower() in SCANNED_EXTENSIONS and path_obj.is_file():
             try:
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(path_obj, "r", encoding="utf-8", errors="ignore") as f:
                     for line_num, line in enumerate(f, start=1):
                         for pattern, desc in FORBIDDEN_PATTERNS:
                             if re.search(pattern, line):
@@ -107,7 +115,7 @@ def scan_for_leaks_and_pii() -> bool:
                                 print(f"  FAIL FUGA DETECTADA en {file_path}:{line_num}: {desc}")
                                 has_leaks = True
             except Exception as e:
-                pass
+                print(f"  WARN: Error leyendo {file_path}: {e}")
 
     if not has_leaks:
         print("  OK Escaneo de privacidad: 0 rutas absolutas o secretos encontrados.")
