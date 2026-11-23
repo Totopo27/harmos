@@ -40,7 +40,13 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             # 2. Entrada MIDI
             self.assertTrue(any("notein" in t for t in box_texts), "Debe contener entrada [notein]")
 
-            # 3. Mapeador de afinación microtonal (coll)
+            # 3. Selector de afinación con items poblados
+            umenu_boxes = [b["box"] for b in boxes if b["box"].get("text") == "umenu" or b["box"].get("maxclass") == "umenu"]
+            self.assertTrue(len(umenu_boxes) >= 1, "Debe contener selector umenu")
+            self.assertIn("items", umenu_boxes[0], "umenu debe tener atributo items poblado")
+            self.assertIn("tet31.txt", umenu_boxes[0]["items"])
+
+            # 4. Mapeador de afinación microtonal (coll)
             self.assertTrue(any("coll" in t for t in box_texts), "Debe contener tabla [coll]")
 
             # 4. Compensación de Forma Normal de Truax (js)
@@ -81,6 +87,11 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             boxes = patch_data["patcher"]["boxes"]
             box_texts = [b["box"]["text"] for b in boxes]
             self.assertTrue(any("coll tet41.txt" in t for t in box_texts), "Debe cargar coll tet41.txt según control_ir")
+
+            umenu_boxes = [b["box"] for b in boxes if b["box"].get("text") == "umenu" or b["box"].get("maxclass") == "umenu"]
+            self.assertTrue(len(umenu_boxes) >= 1)
+            self.assertIn("items", umenu_boxes[0])
+            self.assertIn("tet41.txt", umenu_boxes[0]["items"])
         finally:
             import os
             if os.path.exists(temp_path):

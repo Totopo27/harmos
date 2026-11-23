@@ -137,6 +137,52 @@ class TestContractEngine(unittest.TestCase):
 
 
 class TestTypedPatch(unittest.TestCase):
+    def test_rejected_connections_leave_patch_unchanged(self):
+        patch = TypedPatch()
+        osc = patch.add_box("cycle~ 440")
+        gain = patch.add_box("gain~")
+        unknown = patch.add_box("unknown.external")
+        before = json.dumps(patch.to_dict(), sort_keys=True)
+        for args in [(osc, -1, gain, 0), (osc, 0, gain, 9),
+                     (unknown, 0, gain, 0)]:
+            with self.subTest(args=args):
+                with self.assertRaises(IncompatibleConnectionError):
+                    patch.connect(*args)
+                self.assertEqual(before, json.dumps(patch.to_dict(), sort_keys=True))
+        with self.assertRaises(IncompatibleConnectionError):
+            patch.connect_semantic(osc, 0, gain, "missing_role")
+        self.assertEqual(before, json.dumps(patch.to_dict(), sort_keys=True))
+        patch.connect(unknown, 0, gain, 0, allow_unverifiable=True)
+        self.assertEqual(1, len(patch.lines))
+        self.assertEqual(1, len(patch.unverifiable_connections))
+        self.assertEqual("UNVERIFIABLE", patch.unverifiable_connections[0].status)
+        with self.assertRaises(IncompatibleConnectionError):
+            patch.connect(osc, 0, gain, 9, allow_unverifiable=True)
+
+    def test_union_evidence_and_auto_adaptation_are_consistent(self):
+        contracts = {
+            "source": {"inlets": [], "outlets": [{"name": "out", "type": ["list"]}]},
+            "audio": {"inlets": [], "outlets": [{"name": "out", "type": "signal/float"}]},
+            "scalar": {"inlets": [{"name": "in", "type": "float"}], "outlets": []},
+            "union": {"inlets": [{"name": "in", "type": ["float", "list"]}], "outlets": []},
+            "unpack": ContractEngine().get_object_contract("unpack"),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "contracts.json"
+            path.write_text(json.dumps({"objects": contracts}), encoding="utf-8")
+            engine = ContractEngine(str(path))
+            self.assertEqual("INVALID", engine.assess_connection("audio", 0, "scalar", 0).status)
+            self.assertEqual("signal/float", engine.get_outlets("audio")[0]["type"])
+            patch = TypedPatch(engine)
+            source, scalar, union = [patch.add_box(n) for n in ("source", "scalar", "union")]
+            before = json.dumps(patch.to_dict(), sort_keys=True)
+            with self.assertRaises(IncompatibleConnectionError):
+                patch.connect_auto_adapt(source, -1, scalar, 0)
+            self.assertEqual(before, json.dumps(patch.to_dict(), sort_keys=True))
+            self.assertIsNone(patch.connect_auto_adapt(source, 0, union, 0))
+            self.assertIsNotNone(patch.connect_auto_adapt(source, 0, scalar, 0))
+            self.assertEqual(3, len(patch.lines))
+
     def test_create_valid_maxpat_structure(self):
         patch = TypedPatch()
         osc = patch.add_box("cycle~ 440")
@@ -213,6 +259,18 @@ class TestTypedPatch(unittest.TestCase):
         self.assertEqual(lines[1]["patchline"]["source"][0], adapter_box.box_id)
         self.assertEqual(lines[1]["patchline"]["destination"][0], scale.box_id)
 
+
+
+    def test_maxbox_extra_attributes_and_umenu_format(self):
+        patch = TypedPatch()
+        items = TypedPatch.format_umenu_items(["tet12.txt", "tet31.txt", "tet41.txt"])
+        self.assertEqual(items, ["tet12.txt", ",", "tet31.txt", ",", "tet41.txt"])
+
+        menu_box = patch.add_box("umenu", x=100.0, y=100.0, extra_attributes={"items": items})
+        box_dict = menu_box.to_dict()["box"]
+        self.assertIn("items", box_dict)
+        self.assertEqual(box_dict["items"], items)
+        self.assertEqual(box_dict["maxclass"], "umenu")
 
 
 if __name__ == "__main__":

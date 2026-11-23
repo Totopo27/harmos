@@ -149,8 +149,27 @@ class SCVoiceCompiler:
         # 1. Entrada de control MIDI
         midi_in = patch.add_box("notein", x=50.0, y=30.0)
 
-        # 2. Selector de afinaciones microtonales derivado de la IR de control
-        scale_menu = patch.add_box("umenu", x=220.0, y=30.0, w=150.0)
+        # 2. Selector dinámico de estado derivado de la IR de control (ui_type: umenu)
+        menu_items = []
+        if control_ir and "control_interfaces" in control_ir:
+            for iface in control_ir["control_interfaces"]:
+                if iface.get("ui_type") == "umenu" and iface.get("options"):
+                    menu_items = iface["options"]
+                    break
+
+        if not menu_items and control_ir and "data_tables" in control_ir:
+            menu_items = [t.get("source_file") or f"{t['name']}.txt" for t in control_ir["data_tables"] if t.get("source_file") or t.get("name")]
+
+        if not menu_items:
+            menu_items = [
+                "tet12.txt", "tet31.txt", "tet41.txt", "tet53.txt",
+                "meantone31.txt", "magic41.txt", "partch.txt", "centaur.txt"
+            ]
+
+        umenu_extra = {
+            "items": TypedPatch.format_umenu_items(menu_items)
+        }
+        scale_menu = patch.add_box("umenu", x=220.0, y=30.0, w=150.0, extra_attributes=umenu_extra)
         prepend_read = patch.add_box("prepend read", x=220.0, y=70.0)
         patch.connect(scale_menu, 1, prepend_read, 0)
 
