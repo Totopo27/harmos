@@ -12,10 +12,18 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from core.compiler.oracle_diff import DiffFailure, DiffReport, compare_numeric_or_structure
 from core.compiler.oracle_harvest import TestCase
+
+KernelGenerator = Callable[[List[TestCase], Optional[str]], List[str]]
+_KERNEL_GENERATORS: Dict[str, KernelGenerator] = {}
+
+
+def register_kernel_generator(archetype: str, generator: KernelGenerator) -> None:
+    """Registra un generador de código de arnés para un arquetipo de kernel dado."""
+    _KERNEL_GENERATORS[archetype] = generator
 
 
 def find_cpp_compiler() -> Optional[str]:
@@ -68,6 +76,96 @@ def compile_cpp_executable(
         return False, f"Error al invocar compilador {compiler}: {e}"
 
 
+def _wrap_try_catch(expr_str: str, idx: int, out_type: str = "double", is_vector: bool = False) -> List[str]:
+    """Genera un bloque try/catch en C++ que serializa el resultado o la excepción a JSON."""
+    lines = [
+        "    try {",
+        f"        {out_type} out_val = {expr_str};"
+    ]
+    if is_vector:
+        lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": [" << out_val.first << ", " << out_val.second << "]}}\\n";')
+    else:
+        lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
+    lines.extend([
+        "    } catch (const std::exception& e) {",
+        f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";',
+        "    } catch (...) {",
+        f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";',
+        "    }"
+    ])
+    return lines
+
+
+def _generate_wilson_kernel(cases: List[TestCase], _type_name: Optional[str] = None) -> List[str]:
+    lines = []
+    for idx, c in enumerate(cases):
+        arg0 = c.args[0] if c.args else 1.0
+        expr = f"harmos::kernels::wilson::WilsonKernel::reduce_to_octave({float(arg0)})"
+        lines.extend(_wrap_try_catch(expr, idx, "double"))
+    return lines
+
+
+def _generate_hexslider_kernel(cases: List[TestCase], _type_name: Optional[str] = None) -> List[str]:
+    lines = ["    harmos::kernels::wilson::HexsliderKernel kernel;"]
+    for idx, c in enumerate(cases):
+        if c.fn == "hit_test":
+            arg0 = c.args[0] if len(c.args) > 0 else 0.0
+            arg1 = c.args[1] if len(c.args) > 1 else 0.0
+            expr = f"kernel.hit_test({float(arg0)}, {float(arg1)})"
+            lines.extend(_wrap_try_catch(expr, idx, "int"))
+        else:
+            arg0 = c.args[0] if len(c.args) > 0 else 0
+            arg1 = c.args[1] if len(c.args) > 1 else 0
+            expr = f"kernel.compute_cell_frequency({int(arg0)}, {int(arg1)})"
+            lines.extend(_wrap_try_catch(expr, idx, "double"))
+    return lines
+
+
+def _generate_truax_kernel(cases: List[TestCase], _type_name: Optional[str] = None) -> List[str]:
+    lines = []
+    for idx, c in enumerate(cases):
+        if c.fn == "to_normal_form":
+            arg0 = c.args[0] if len(c.args) > 0 else 1.0
+            arg1 = c.args[1] if len(c.args) > 1 else 1.0
+            expr = f"harmos::kernels::truax::TruaxKernel::to_normal_form({float(arg0)}, {float(arg1)})"
+            lines.extend(_wrap_try_catch(expr, idx, "auto", is_vector=True))
+        else:
+            arg0 = c.args[0] if len(c.args) > 0 else 220.0
+            arg1 = c.args[1] if len(c.args) > 1 else 1.0
+            arg2 = c.args[2] if len(c.args) > 2 else 1.0
+            expr = f"harmos::kernels::truax::TruaxKernel::calc_carrier_freq({float(arg0)}, {float(arg1)}, {float(arg2)})"
+            lines.extend(_wrap_try_catch(expr, idx, "double"))
+    return lines
+
+
+def _generate_dsp_kernel(cases: List[TestCase], kernel_type_name: Optional[str] = None) -> List[str]:
+    type_name = kernel_type_name or "harmos_demoKernel"
+    lines = [f"    harmos::kernels::{type_name} kernel;"]
+    for idx, c in enumerate(cases):
+        arg0 = c.args[0] if len(c.args) > 0 else 0.0
+        arg1 = c.args[1] if len(c.args) > 1 else 1.0
+        expr = f"kernel.process_sample({float(arg0)}f, {float(arg1)})"
+        lines.extend(_wrap_try_catch(expr, idx, "float"))
+    return lines
+
+
+def _generate_control_kernel(cases: List[TestCase], kernel_type_name: Optional[str] = None) -> List[str]:
+    type_name = kernel_type_name or "harmos_demoKernel"
+    lines = [f"    harmos::kernels::{type_name} kernel;"]
+    for idx, c in enumerate(cases):
+        arg0 = c.args[0] if c.args else 0.0
+        expr = f"kernel.process_scalar({float(arg0)})"
+        lines.extend(_wrap_try_catch(expr, idx, "double"))
+    return lines
+
+
+register_kernel_generator("wilson", _generate_wilson_kernel)
+register_kernel_generator("hexslider", _generate_hexslider_kernel)
+register_kernel_generator("truax", _generate_truax_kernel)
+register_kernel_generator("dsp", _generate_dsp_kernel)
+register_kernel_generator("control", _generate_control_kernel)
+
+
 def generate_cpp_harness(
     kernel_header_path: Union[str, Path],
     cases: List[TestCase],
@@ -80,106 +178,135 @@ def generate_cpp_harness(
     """
     header_posix = Path(kernel_header_path).resolve().as_posix()
 
-    lines = []
-    lines.append("// =============================================================================")
-    lines.append("// Harmos Headless Test Harness (Autogenerated)")
-    lines.append("// =============================================================================")
-    lines.append("#include <iostream>")
-    lines.append("#include <iomanip>")
-    lines.append("#include <vector>")
-    lines.append("#include <string>")
-    lines.append("#include <cmath>")
-    lines.append("#include <exception>")
-    lines.append(f'#include "{header_posix}"')
-    lines.append("")
-    lines.append("int main() {")
-    lines.append("    std::cout << std::setprecision(17);")
-    lines.append("")
+    lines = [
+        "// =============================================================================",
+        "// Harmos Headless Test Harness (Autogenerated)",
+        "// =============================================================================",
+        "#include <iostream>",
+        "#include <iomanip>",
+        "#include <vector>",
+        "#include <string>",
+        "#include <cmath>",
+        "#include <exception>",
+        f'#include "{header_posix}"',
+        "",
+        "int main() {",
+        "    std::cout << std::setprecision(17);",
+        ""
+    ]
 
-    if kernel_class == "wilson":
-        for idx, c in enumerate(cases):
-            arg0 = c.args[0] if c.args else 1.0
-            lines.append("    try {")
-            lines.append(f"        double out_val = harmos::kernels::wilson::WilsonKernel::reduce_to_octave({float(arg0)});")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
-            lines.append("    } catch (const std::exception& e) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
-            lines.append("    } catch (...) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
-            lines.append("    }")
-    elif kernel_class == "hexslider":
-        lines.append("    harmos::kernels::wilson::HexsliderKernel kernel;")
-        for idx, c in enumerate(cases):
-            lines.append("    try {")
-            if c.fn == "hit_test":
-                arg0 = c.args[0] if len(c.args) > 0 else 0.0
-                arg1 = c.args[1] if len(c.args) > 1 else 0.0
-                lines.append(f"        int out_val = kernel.hit_test({float(arg0)}, {float(arg1)});")
-                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
-            else:
-                arg0 = c.args[0] if len(c.args) > 0 else 0
-                arg1 = c.args[1] if len(c.args) > 1 else 0
-                lines.append(f"        double out_val = kernel.compute_cell_frequency({int(arg0)}, {int(arg1)});")
-                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
-            lines.append("    } catch (const std::exception& e) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
-            lines.append("    } catch (...) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
-            lines.append("    }")
-    elif kernel_class == "truax":
-        for idx, c in enumerate(cases):
-            lines.append("    try {")
-            if c.fn == "to_normal_form":
-                arg0 = c.args[0] if len(c.args) > 0 else 1.0
-                arg1 = c.args[1] if len(c.args) > 1 else 1.0
-                lines.append(f"        auto out_val = harmos::kernels::truax::TruaxKernel::to_normal_form({float(arg0)}, {float(arg1)});")
-                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": [" << out_val.first << ", " << out_val.second << "]}}\\n";')
-            else:
-                arg0 = c.args[0] if len(c.args) > 0 else 220.0
-                arg1 = c.args[1] if len(c.args) > 1 else 1.0
-                arg2 = c.args[2] if len(c.args) > 2 else 1.0
-                lines.append(f"        double out_val = harmos::kernels::truax::TruaxKernel::calc_carrier_freq({float(arg0)}, {float(arg1)}, {float(arg2)});")
-                lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
-            lines.append("    } catch (const std::exception& e) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
-            lines.append("    } catch (...) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
-            lines.append("    }")
-    elif kernel_class == "dsp":
-        type_name = kernel_type_name or "harmos_demoKernel"
-        lines.append(f"    harmos::kernels::{type_name} kernel;")
-        for idx, c in enumerate(cases):
-            arg0 = c.args[0] if len(c.args) > 0 else 0.0
-            arg1 = c.args[1] if len(c.args) > 1 else 1.0
-            lines.append("    try {")
-            lines.append(f"        float out_val = kernel.process_sample({float(arg0)}f, {float(arg1)});")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
-            lines.append("    } catch (const std::exception& e) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
-            lines.append("    } catch (...) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
-            lines.append("    }")
-    else:
-        # Default control / scalar
-        type_name = kernel_type_name or "harmos_demoKernel"
-        lines.append(f"    harmos::kernels::{type_name} kernel;")
-        for idx, c in enumerate(cases):
-            arg0 = c.args[0] if c.args else 0.0
-            lines.append("    try {")
-            lines.append(f"        double out_val = kernel.process_scalar({float(arg0)});")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"ok\\", \\"actual\\": " << out_val << "}}\\n";')
-            lines.append("    } catch (const std::exception& e) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"" << e.what() << "\\"}}\\n";')
-            lines.append("    } catch (...) {")
-            lines.append(f'        std::cout << "{{\\"id\\": {idx}, \\"status\\": \\"error\\", \\"error\\": \\"unknown_exception\\"}}\\n";')
-            lines.append("    }")
+    generator = _KERNEL_GENERATORS.get(kernel_class, _KERNEL_GENERATORS["control"])
+    lines.extend(generator(cases, kernel_type_name))
 
-    lines.append("")
-    lines.append("    return 0;")
-    lines.append("}")
-    lines.append("")
-
+    lines.extend([
+        "",
+        "    return 0;",
+        "}",
+        ""
+    ])
     return "\n".join(lines)
+
+
+def execute_headless_binary(
+    binary_path: Union[str, Path],
+    timeout_sec: float = 10.0
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Ejecuta el binario C++ compilado con timeout.
+    Retorna (stdout, error_message).
+    """
+    try:
+        proc = subprocess.run(
+            [str(binary_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False
+        )
+        return proc.stdout, None
+    except subprocess.TimeoutExpired:
+        return None, f"Timeout ({timeout_sec}s) alcanzado durante la ejecucion del kernel C++."
+    except Exception as e:
+        return None, f"Error al ejecutar arnes C++ binario: {e}"
+
+
+def parse_headless_output(stdout: str) -> Tuple[Dict[int, Dict[str, Any]], List[str]]:
+    """
+    Parsea las líneas JSON emitidas por el arnés C++.
+    Retorna (outputs_by_id, parse_errors).
+    """
+    outputs_by_id: Dict[int, Dict[str, Any]] = {}
+    parse_errors: List[str] = []
+
+    for line_num, line in enumerate(stdout.splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("{"):
+            if not line.endswith("}"):
+                parse_errors.append(f"Linea {line_num}: JSON truncado o incompleto: {line}")
+                continue
+            try:
+                data = json.loads(line)
+                if "id" in data:
+                    outputs_by_id[data["id"]] = data
+                else:
+                    parse_errors.append(f"Linea {line_num}: JSON sin campo 'id': {line}")
+            except Exception as e:
+                parse_errors.append(f"Linea {line_num}: Error al parsear JSON ({e}): {line}")
+        else:
+            # Línea informativa o log fuera de formato JSON
+            pass
+
+    return outputs_by_id, parse_errors
+
+
+def evaluate_headless_cases(
+    cases: List[TestCase],
+    outputs_by_id: Dict[int, Dict[str, Any]],
+    parse_errors: Optional[List[str]] = None
+) -> Tuple[int, int, List[DiffFailure]]:
+    """
+    Compara las salidas producidas por el arnés C++ contra los casos esperados.
+    Retorna (passed_count, failed_count, failures_list).
+    """
+    passed = 0
+    failed = 0
+    failures: List[DiffFailure] = []
+
+    for idx, c in enumerate(cases):
+        if idx not in outputs_by_id:
+            failed += 1
+            failures.append(DiffFailure(
+                case=c,
+                actual=None,
+                reason="Sin salida producida por el arnes C++ (posible crash o excepcion no capturada)"
+            ))
+            continue
+
+        item = outputs_by_id[idx]
+        if item.get("status") != "ok":
+            failed += 1
+            failures.append(DiffFailure(
+                case=c,
+                actual=None,
+                reason=f"Excepcion en C++: {item.get('error', 'desconocido')}"
+            ))
+            continue
+
+        actual_val = item.get("actual")
+        ok, reason = compare_numeric_or_structure(c.expected, actual_val, tolerance=c.tolerance)
+        if ok:
+            passed += 1
+        else:
+            failed += 1
+            failures.append(DiffFailure(
+                case=c,
+                actual=actual_val,
+                reason=reason or "Discrepancia numerica desconocida"
+            ))
+
+    return passed, failed, failures
 
 
 def run_headless_cases(
@@ -235,7 +362,6 @@ def run_headless_cases(
             include_dirs=include_dirs,
             compiler_path=chosen_compiler
         )
-
         if not ok_compile:
             return DiffReport(
                 total_cases=len(cases),
@@ -246,80 +372,19 @@ def run_headless_cases(
                 details=[f"Fallo de compilacion del arnes C++ con {chosen_compiler}: {compile_msg}"]
             )
 
-        try:
-            proc = subprocess.run(
-                [str(harness_exe)],
-                capture_output=True,
-                text=True,
-                timeout=timeout_sec,
-                check=False
-            )
-        except subprocess.TimeoutExpired:
+        stdout, err = execute_headless_binary(harness_exe, timeout_sec=timeout_sec)
+        if err or stdout is None:
             return DiffReport(
                 total_cases=len(cases),
                 passed_cases=0,
                 failed_cases=len(cases),
                 verdict="FAIL",
                 failures=[],
-                details=[f"Timeout ({timeout_sec}s) alcanzado durante la ejecucion del kernel C++."]
-            )
-        except Exception as e:
-            return DiffReport(
-                total_cases=len(cases),
-                passed_cases=0,
-                failed_cases=len(cases),
-                verdict="FAIL",
-                failures=[],
-                details=[f"Error al ejecutar arnes C++ binario: {e}"]
+                details=[err or "Ejecucion C++ headless retorno salida vacia."]
             )
 
-        # Parsear líneas de salida
-        outputs_by_id: Dict[int, Dict[str, Any]] = {}
-        for line in proc.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("{") and line.endswith("}"):
-                try:
-                    data = json.loads(line)
-                    if "id" in data:
-                        outputs_by_id[data["id"]] = data
-                except Exception:
-                    continue
-
-        passed = 0
-        failed = 0
-        failures: List[DiffFailure] = []
-
-        for idx, c in enumerate(cases):
-            if idx not in outputs_by_id:
-                failed += 1
-                failures.append(DiffFailure(
-                    case=c,
-                    actual=None,
-                    reason="Sin salida producida por el arnes C++ (posible crash o excepcion no capturada)"
-                ))
-                continue
-
-            item = outputs_by_id[idx]
-            if item.get("status") != "ok":
-                failed += 1
-                failures.append(DiffFailure(
-                    case=c,
-                    actual=None,
-                    reason=f"Excepcion en C++: {item.get('error', 'desconocido')}"
-                ))
-                continue
-
-            actual_val = item.get("actual")
-            ok, reason = compare_numeric_or_structure(c.expected, actual_val, tolerance=c.tolerance)
-            if ok:
-                passed += 1
-            else:
-                failed += 1
-                failures.append(DiffFailure(
-                    case=c,
-                    actual=actual_val,
-                    reason=reason or "Discrepancia numerica desconocida"
-                ))
+        outputs_by_id, parse_errors = parse_headless_output(stdout)
+        passed, failed, failures = evaluate_headless_cases(cases, outputs_by_id, parse_errors)
 
         verdict = "PASS" if failed == 0 else "FAIL"
         details = [
@@ -328,6 +393,8 @@ def run_headless_cases(
             f"Casos evaluados: {len(cases)} ({passed} exitosos, {failed} fallidos)",
             f"Veredicto: {verdict} (SEMANTICO HEADLESS)"
         ]
+        if parse_errors:
+            details.extend(parse_errors[:5])
 
         return DiffReport(
             total_cases=len(cases),

@@ -80,8 +80,6 @@ def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
     category = ir.get("category", "control")
     attributes = ir.get("attributes", [])
     attribute_ids = _attribute_identifiers(attributes)
-    inlets = ir.get("inlets", [])
-    outlets = ir.get("outlets", [])
 
     is_dsp = (category == "dsp")
 

@@ -5,7 +5,7 @@ Permite capturar entradas y salidas esperadas a partir de suites de tests existe
 código de referencia o generadores de casos de borde sintéticos.
 """
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 

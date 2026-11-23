@@ -12,7 +12,6 @@ from typing import Dict, Any, Optional, List, Tuple
 
 HARMOS_VERSION = "0.2.0"
 
-
 TEXT_EXTENSIONS = {
     ".json", ".maxpat", ".cpp", ".hpp", ".h", ".c", ".txt", ".cmake",
     ".py", ".md", ".xml", ".sc", ".scd", ".yml", ".yaml"
@@ -49,11 +48,12 @@ def resolve_canonical_contracts_path() -> Path:
     schema_path = current_dir.parent / "schema" / "max_contracts.json"
     if schema_path.is_file():
         return schema_path
-    
-    # Búsqueda de respaldo en raíz de repo
-    root_candidate = current_dir.parent.parent / "core" / "schema" / "max_contracts.json"
-    if root_candidate.is_file():
-        return root_candidate
+
+    # Búsqueda de respaldo ascendente hacia la raíz
+    for parent in [current_dir.parent.parent, current_dir.parent.parent.parent]:
+        candidate = parent / "core" / "schema" / "max_contracts.json"
+        if candidate.is_file():
+            return candidate
 
     raise FileNotFoundError(f"No se encontró max_contracts.json en la ruta esperada: {schema_path}")
 
@@ -65,9 +65,7 @@ def build_provenance_record(
     extra_metadata: Optional[Dict[str, Any]] = None,
     artifacts: Optional[Dict[str, Path | str]] = None
 ) -> Dict[str, Any]:
-    """
-    Construye el registro de procedencia inmutable.
-    """
+    """Construye el registro de procedencia inmutable."""
     ir_p = Path(ir_path)
     contracts_p = Path(contracts_path) if contracts_path else resolve_canonical_contracts_path()
 
@@ -123,37 +121,12 @@ def write_provenance_file(output_dir: Path | str, record: Dict[str, Any]) -> Pat
     return target_file
 
 
-def verify_provenance(
-    emitted_from_path: Path | str,
-    current_contracts_path: Optional[Path | str] = None,
-    current_ir_path: Optional[Path | str] = None,
-    current_source_path: Optional[Path | str] = None
-) -> Tuple[str, List[str]]:
-    """
-    Verifica un archivo emitted-from.json contra los contratos y fuentes actuales.
-    Devuelve (estado, detalles).
-    Estados: VALID, STALE_CONTRACTS, STALE_IR, STALE_SOURCE, STALE_ARTIFACTS,
-    UNVERIFIABLE, INVALID.
+# =============================================================================
+# Helper Validators para verify_provenance
+# =============================================================================
 
-    Regla de honestidad: cuando la evidencia no puede leerse o el registro no
-    contiene la huella solicitada, el veredicto es UNVERIFIABLE, nunca VALID.
-    """
-    p = Path(emitted_from_path)
-    if p.is_dir():
-        p = p / "emitted-from.json"
-
-    if not p.is_file():
-        return "INVALID", [f"Archivo de procedencia no encontrado: {p}"]
-
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        return "INVALID", [f"Error al parsear emitted-from.json: {e}"]
-
-    details: List[str] = []
-
-    # 0. Integridad estructural: un registro malformado es INVALID, nunca una excepción
+def _verify_structure(data: Any) -> Optional[Tuple[str, List[str]]]:
+    """Verifica que el JSON tenga estructura válida en sus secciones fundamentales."""
     if not isinstance(data, dict):
         return "INVALID", ["La raíz de emitted-from.json no es un objeto JSON."]
 
@@ -164,8 +137,15 @@ def verify_provenance(
                 f"La sección '{section}' de emitted-from.json no es un objeto JSON.",
                 "El registro está malformado y no puede usarse como evidencia de procedencia."
             ]
+    return None
 
-    # 1. Validar contratos (fail-closed: sin contratos legibles no hay veredicto positivo)
+
+def _verify_contracts(
+    data: Dict[str, Any],
+    current_contracts_path: Optional[Path | str],
+    details: List[str]
+) -> Optional[Tuple[str, List[str]]]:
+    """Valida los contratos canónicos de Max MSP contra el registro."""
     recorded_contracts = data.get("contracts") or {}
     recorded_contracts_hash = recorded_contracts.get("sha256")
     if not recorded_contracts_hash:
@@ -191,93 +171,176 @@ def verify_provenance(
             f"Contrato actual:     {current_contracts_hash[:12]}...",
             "Riesgo: El parche emitido puede contener índices o tipos de inlets obsoletos."
         ]
+
     details.append(f"Contratos OK: {contracts_p.name} ({current_contracts_hash[:8]})")
+    return None
 
-    # 2. Validar IR si se provee (fail-closed: pedir verificacion con evidencia ausente no es VALID)
-    if current_ir_path:
-        recorded_ir = data.get("ir") or {}
-        recorded_ir_hash = recorded_ir.get("sha256")
-        if not recorded_ir_hash:
-            return "UNVERIFIABLE", [
-                "El registro de procedencia no contiene huella de IR.",
-                "Se solicitó verificar el IR actual pero no existe huella registrada contra la cual comparar."
-            ]
 
-        ir_p = Path(current_ir_path)
-        if not ir_p.is_file():
-            return "UNVERIFIABLE", [f"IR actual no encontrado: {ir_p}"]
+def _verify_ir(
+    data: Dict[str, Any],
+    current_ir_path: Optional[Path | str],
+    details: List[str]
+) -> Optional[Tuple[str, List[str]]]:
+    """Valida la especificación IR si se solicita."""
+    if not current_ir_path:
+        return None
 
-        current_ir_hash = compute_file_sha256(ir_p)
-        if recorded_ir_hash != current_ir_hash:
-            return "STALE_IR", [
-                f"La especificación IR ({ir_p.name}) ha sido modificada tras la emisión.",
-                f"IR registrada: {recorded_ir_hash[:12]}...",
-                f"IR actual:     {current_ir_hash[:12]}..."
-            ]
-        details.append(f"IR OK: {ir_p.name} ({current_ir_hash[:8]})")
+    recorded_ir = data.get("ir") or {}
+    recorded_ir_hash = recorded_ir.get("sha256")
+    if not recorded_ir_hash:
+        return "UNVERIFIABLE", [
+            "El registro de procedencia no contiene huella de IR.",
+            "Se solicitó verificar el IR actual pero no existe huella registrada contra la cual comparar."
+        ]
 
-    # 3. Validar código fuente si se provee (misma regla fail-closed)
-    if current_source_path:
-        recorded_src = data.get("source") or {}
-        recorded_src_hash = recorded_src.get("sha256")
-        if not recorded_src_hash:
-            return "UNVERIFIABLE", [
-                "El registro de procedencia no contiene huella del código fuente.",
-                "Se solicitó verificar el fuente actual pero no existe huella registrada contra la cual comparar."
-            ]
+    ir_p = Path(current_ir_path)
+    if not ir_p.is_file():
+        return "UNVERIFIABLE", [f"IR actual no encontrado: {ir_p}"]
 
-        src_p = Path(current_source_path)
-        if not src_p.is_file():
-            return "UNVERIFIABLE", [f"Código fuente actual no encontrado: {src_p}"]
+    current_ir_hash = compute_file_sha256(ir_p)
+    if recorded_ir_hash != current_ir_hash:
+        return "STALE_IR", [
+            f"La especificación IR ({ir_p.name}) ha sido modificada tras la emisión.",
+            f"IR registrada: {recorded_ir_hash[:12]}...",
+            f"IR actual:     {current_ir_hash[:12]}..."
+        ]
 
-        current_src_hash = compute_file_sha256(src_p)
-        if recorded_src_hash != current_src_hash:
-            return "STALE_SOURCE", [
-                f"El código fuente ({src_p.name}) ha sido modificado tras la emisión.",
-                f"Fuente registrada: {recorded_src_hash[:12]}...",
-                f"Fuente actual:     {current_src_hash[:12]}..."
-            ]
-        details.append(f"Fuente OK: {src_p.name} ({current_src_hash[:8]})")
+    details.append(f"IR OK: {ir_p.name} ({current_ir_hash[:8]})")
+    return None
 
-    # 4. Validar artefactos emitidos (.maxpat, .cpp, CMakeLists.txt)
+
+def _verify_source(
+    data: Dict[str, Any],
+    current_source_path: Optional[Path | str],
+    details: List[str]
+) -> Optional[Tuple[str, List[str]]]:
+    """Valida el código fuente original si se solicita."""
+    if not current_source_path:
+        return None
+
+    recorded_src = data.get("source") or {}
+    recorded_src_hash = recorded_src.get("sha256")
+    if not recorded_src_hash:
+        return "UNVERIFIABLE", [
+            "El registro de procedencia no contiene huella del código fuente.",
+            "Se solicitó verificar el fuente actual pero no existe huella registrada contra la cual comparar."
+        ]
+
+    src_p = Path(current_source_path)
+    if not src_p.is_file():
+        return "UNVERIFIABLE", [f"Código fuente actual no encontrado: {src_p}"]
+
+    current_src_hash = compute_file_sha256(src_p)
+    if recorded_src_hash != current_src_hash:
+        return "STALE_SOURCE", [
+            f"El código fuente ({src_p.name}) ha sido modificado tras la emisión.",
+            f"Fuente registrada: {recorded_src_hash[:12]}...",
+            f"Fuente actual:     {current_src_hash[:12]}..."
+        ]
+
+    details.append(f"Fuente OK: {src_p.name} ({current_src_hash[:8]})")
+    return None
+
+
+def _verify_artifacts(
+    data: Dict[str, Any],
+    base_dir: Path,
+    details: List[str]
+) -> Optional[Tuple[str, List[str]]]:
+    """Valida los artefactos sintetizados registrados en el archivo de procedencia."""
     recorded_artifacts = data.get("artifacts")
-    if recorded_artifacts:
-        base_dir = p.parent
-        for artifact_key in sorted(recorded_artifacts):
-            entry = recorded_artifacts.get(artifact_key)
-            if not isinstance(entry, dict):
-                return "INVALID", [
-                    f"La entrada del artefacto '{artifact_key}' no es un objeto JSON.",
-                    "El registro está malformado y no puede usarse como evidencia de procedencia."
-                ]
-            artifact_hash = entry.get("sha256")
-            artifact_file = entry.get("file")
-            if not artifact_hash or not artifact_file:
-                return "UNVERIFIABLE", [
-                    f"Entrada de artefacto '{artifact_key}' incompleta en el registro.",
-                    "No es posible certificar la integridad del artefacto emitido."
-                ]
-
-            artifact_p = base_dir / artifact_file
-            if not artifact_p.is_file():
-                return "UNVERIFIABLE", [
-                    f"Artefacto registrado no encontrado: {artifact_file}",
-                    "El registro declara un artefacto emitido que ya no está junto al archivo de procedencia."
-                ]
-
-            current_artifact_hash = compute_file_sha256(artifact_p)
-            if artifact_hash != current_artifact_hash:
-                return "STALE_ARTIFACTS", [
-                    f"El artefacto emitido '{artifact_file}' fue modificado tras la emisión.",
-                    f"Artefacto registrado: {artifact_hash[:12]}...",
-                    f"Artefacto actual:     {current_artifact_hash[:12]}..."
-                ]
-            details.append(f"Artefacto OK: {artifact_file} ({current_artifact_hash[:8]})")
-    else:
+    if not recorded_artifacts:
         details.append(
             "Registro sin huella de artefactos: se certifican solo los insumos "
             "(contratos, IR, fuente); la integridad del parche emitido no es verificable."
         )
+        return None
+
+    for artifact_key in sorted(recorded_artifacts):
+        entry = recorded_artifacts.get(artifact_key)
+        if not isinstance(entry, dict):
+            return "INVALID", [
+                f"La entrada del artefacto '{artifact_key}' no es un objeto JSON.",
+                "El registro está malformado y no puede usarse como evidencia de procedencia."
+            ]
+        artifact_hash = entry.get("sha256")
+        artifact_file = entry.get("file")
+        if not artifact_hash or not artifact_file:
+            return "UNVERIFIABLE", [
+                f"Entrada de artefacto '{artifact_key}' incompleta en el registro.",
+                "No es posible certificar la integridad del artefacto emitido."
+            ]
+
+        artifact_p = base_dir / artifact_file
+        if not artifact_p.is_file():
+            return "UNVERIFIABLE", [
+                f"Artefacto registrado no encontrado: {artifact_file}",
+                "El registro declara un artefacto emitido que ya no está junto al archivo de procedencia."
+            ]
+
+        current_artifact_hash = compute_file_sha256(artifact_p)
+        if artifact_hash != current_artifact_hash:
+            return "STALE_ARTIFACTS", [
+                f"El artefacto emitido '{artifact_file}' fue modificado tras la emisión.",
+                f"Artefacto registrado: {artifact_hash[:12]}...",
+                f"Artefacto actual:     {current_artifact_hash[:12]}..."
+            ]
+        details.append(f"Artefacto OK: {artifact_file} ({current_artifact_hash[:8]})")
+
+    return None
+
+
+def verify_provenance(
+    emitted_from_path: Path | str,
+    current_contracts_path: Optional[Path | str] = None,
+    current_ir_path: Optional[Path | str] = None,
+    current_source_path: Optional[Path | str] = None
+) -> Tuple[str, List[str]]:
+    """
+    Verifica un archivo emitted-from.json contra los contratos y fuentes actuales.
+    Devuelve (estado, detalles).
+    Estados: VALID, STALE_CONTRACTS, STALE_IR, STALE_SOURCE, STALE_ARTIFACTS,
+    UNVERIFIABLE, INVALID.
+    """
+    p = Path(emitted_from_path)
+    if p.is_dir():
+        p = p / "emitted-from.json"
+
+    if not p.is_file():
+        return "INVALID", [f"Archivo de procedencia no encontrado: {p}"]
+
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return "INVALID", [f"Error al parsear emitted-from.json: {e}"]
+
+    # 0. Estructura general
+    err = _verify_structure(data)
+    if err:
+        return err
+
+    details: List[str] = []
+
+    # 1. Contratos
+    err = _verify_contracts(data, current_contracts_path, details)
+    if err:
+        return err
+
+    # 2. IR
+    err = _verify_ir(data, current_ir_path, details)
+    if err:
+        return err
+
+    # 3. Código fuente
+    err = _verify_source(data, current_source_path, details)
+    if err:
+        return err
+
+    # 4. Artefactos
+    err = _verify_artifacts(data, p.parent, details)
+    if err:
+        return err
 
     emitted_at = data.get("emitted_at", "Desconocido")
     details.append(f"Fecha de emisión: {emitted_at}")
