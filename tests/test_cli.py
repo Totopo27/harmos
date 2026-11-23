@@ -94,6 +94,14 @@ class TestHarmosCLI(unittest.TestCase):
         # Debe contener al menos la caja del objeto bajo prueba
         self.assertTrue(any("harmos.demo" in b["box"]["text"] for b in boxes))
 
+        # 3. Verificación de contratos mediante auditoría estática
+        from scripts.audit import assess_patcher_contracts
+        engine = ContractEngine.from_ir(sample_ir)
+        audit_res = assess_patcher_contracts(Path(maxpat_path), contract_engine=engine)
+        self.assertEqual(audit_res.violations, [], f"Contract violations: {audit_res.violations}")
+        self.assertEqual(audit_res.unverifiable, [], f"Unverifiable cords: {audit_res.unverifiable}")
+        self.assertGreater(audit_res.checked, 0)
+
         # 3. Comprobar que el C++ generado compila bajo min-devkit
         with open(cpp_path, "r", encoding="utf-8") as f:
             cpp_content = f.read()

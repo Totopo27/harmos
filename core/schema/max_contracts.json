@@ -3,6 +3,10 @@
   "title": "MaxObjectContractRules",
   "description": "Especificación estricta de contratos de entradas y salidas de Max MSP para generación dinámica sin hardcoding.",
   "objects": {
+    "comment": {
+      "inlets": {},
+      "outlets": {}
+    },
     "flonum": {
       "inlets": {
         "0": { "name": "value_or_message", "type": "float" }
@@ -14,8 +18,16 @@
     },
     "cycle~": {
       "inlets": {
-        "0": { "name": "frequency_hz_or_phase", "type": "signal" },
-        "1": { "name": "phase_offset", "type": "signal" }
+        "0": {
+          "name": "frequency_hz",
+          "type": "signal/float",
+          "aliases": ["freq", "frequency", "frequency_hz_or_phase"]
+        },
+        "1": {
+          "name": "phase_offset",
+          "type": "signal/float",
+          "aliases": ["phase"]
+        }
       },
       "outlets": {
         "0": { "name": "audio_out", "type": "signal" }
@@ -27,7 +39,8 @@
         "1": { "name": "gain_control", "type": "int" }
       },
       "outlets": {
-        "0": { "name": "audio_out", "type": "signal" }
+        "0": { "name": "audio_out", "type": "signal" },
+        "1": { "name": "slider_position", "type": "int", "aliases": ["position", "gain_value"] }
       }
     },
     "ezdac~": {
@@ -144,7 +157,8 @@
         "1": { "name": "in_low", "type": "float" },
         "2": { "name": "in_high", "type": "float" },
         "3": { "name": "out_low", "type": "float" },
-        "4": { "name": "out_high", "type": "float" }
+        "4": { "name": "out_high", "type": "float" },
+        "5": { "name": "exponential_power", "type": "float" }
       },
       "outlets": {
         "0": { "name": "scaled_output", "type": "float" }
@@ -280,11 +294,11 @@
     },
     "adsr~": {
       "inlets": {
-        "0": { "name": "gate_trigger", "type": "signal" },
-        "1": { "name": "attack_time_ms", "type": "float" },
-        "2": { "name": "decay_time_ms", "type": "float" },
-        "3": { "name": "sustain_gain", "type": "float" },
-        "4": { "name": "release_time_ms", "type": "float" }
+        "0": { "name": "gate_trigger", "type": "signal/float/bang", "aliases": ["gate", "trigger"] },
+        "1": { "name": "attack_time_ms", "type": "float", "aliases": ["attack"] },
+        "2": { "name": "decay_time_ms", "type": "float", "aliases": ["decay"] },
+        "3": { "name": "sustain_gain", "type": "float", "aliases": ["sustain"] },
+        "4": { "name": "release_time_ms", "type": "float", "aliases": ["release"] }
       },
       "outlets": {
         "0": { "name": "envelope_signal", "type": "signal" },
@@ -408,7 +422,8 @@
       "outlets": {
         "0": { "name": "entry_data", "type": "anything" },
         "1": { "name": "index_or_key", "type": "anything" },
-        "2": { "name": "dump_out", "type": "anything" }
+        "2": { "name": "not_found_bang", "type": "bang" },
+        "3": { "name": "dump_out", "type": "anything" }
       }
     },
     "buffer~": {
@@ -463,8 +478,8 @@
         "0": { "name": "input_value", "type": "anything" }
       },
       "outlets": {
-        "0": { "name": "outlet_right", "type": "anything" },
-        "1": { "name": "outlet_left", "type": "anything" }
+        "0": { "name": "outlet_left", "type": "anything", "aliases": ["left", "out_0"] },
+        "1": { "name": "outlet_right", "type": "anything", "aliases": ["right", "out_1"] }
       }
     },
     "t": {
@@ -472,8 +487,8 @@
         "0": { "name": "input_value", "type": "anything" }
       },
       "outlets": {
-        "0": { "name": "outlet_right", "type": "anything" },
-        "1": { "name": "outlet_left", "type": "anything" }
+        "0": { "name": "outlet_left", "type": "anything", "aliases": ["left", "out_0"] },
+        "1": { "name": "outlet_right", "type": "anything", "aliases": ["right", "out_1"] }
       }
     },
     "loadmess": {

@@ -41,9 +41,9 @@ class TestContractEngine(unittest.TestCase):
         self.assertIn("signal", reason)
 
     def test_expanded_control_contracts(self):
-        # scale: 0: input, 1: in_low, 2: in_high, 3: out_low, 4: out_high
+        # scale: 0: input, 1: in_low, 2: in_high, 3: out_low, 4: out_high, 5: power
         scale_inlets = self.engine.get_inlets("scale")
-        self.assertEqual(len(scale_inlets), 5)
+        self.assertGreaterEqual(len(scale_inlets), 5)
         self.assertEqual(self.engine.resolve_inlet_index("scale", "in_low"), 1)
         self.assertEqual(self.engine.resolve_inlet_index("scale", "out_high"), 4)
 

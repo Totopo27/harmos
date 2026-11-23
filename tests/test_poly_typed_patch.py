@@ -5,7 +5,9 @@ Vertical Slice 3: Creación de subpatchers de voz y contenedores poly~.
 import unittest
 import json
 import tempfile
+from pathlib import Path
 from core.compiler.typed_patch import TypedPatch, MaxBox
+from scripts.audit import audit_contracts
 
 
 class TestPolyTypedPatch(unittest.TestCase):
@@ -28,13 +30,13 @@ class TestPolyTypedPatch(unittest.TestCase):
         # Control de voz dinámico con thispoly~
         thispoly = patch.add_box("thispoly~")
 
-        # Conectar grafo
-        patch.connect(osc, 0, mul, 0)
-        patch.connect(amp_env, 0, mul, 1)
-        patch.connect(mul, 0, out_l, 0)
-        patch.connect(mul, 0, out_r, 0)
-        patch.connect(in_gate, 0, amp_env, 0) # gate a adsr~
-        patch.connect(amp_env, 1, thispoly, 0) # bang de fin de envelope a thispoly~ para liberar/mutear
+        # Conectar grafo mediante resolución semántica (Zero Hardcoding)
+        patch.connect_semantic(osc, "audio_out", mul, "audio_in_a")
+        patch.connect_semantic(amp_env, "envelope_signal", mul, "audio_in_b_or_gain")
+        patch.connect_semantic(mul, "multiplied_audio", out_l, "signal_input")
+        patch.connect_semantic(mul, "multiplied_audio", out_r, "signal_input")
+        patch.connect_semantic(in_gate, 0, amp_env, "gate_trigger")
+        patch.connect_semantic(amp_env, "envelope_completed_bang", thispoly, "mute_or_voice_messages")
 
         with tempfile.NamedTemporaryFile(suffix=".maxpat", delete=False) as f:
             temp_path = f.name
@@ -52,6 +54,11 @@ class TestPolyTypedPatch(unittest.TestCase):
             self.assertIn("out~ 2", box_texts)
             self.assertIn("thispoly~", box_texts)
             self.assertIn("adsr~ 10 300 0.5 1000", box_texts)
+
+            # Verificación formal de contratos en el patcher sintetizado
+            violations, total_cords = audit_contracts(Path(temp_path))
+            self.assertEqual(len(violations), 0, f"Contract violations in voice subpatcher: {violations}")
+            self.assertEqual(total_cords, 6)
         finally:
             import os
             if os.path.exists(temp_path):

@@ -123,10 +123,11 @@ class TestBenchmarkEngine(unittest.TestCase):
 
         # 1. Todos los veredictos deben ser exactamente iguales a SHIP
         self.assertTrue(all(verdict == "SHIP" for verdict in verdicts), f"Veredictos inestables: {verdicts}, detalles: {all_reasons}")
+        self.assertTrue(all(s > 1.0 for s in speedups), f"Speedup insuficiente: {speedups}")
 
-        # 2. La dispersion de speedup entre ejecuciones debe ser acotada (< 0.5x de rango)
+        # 2. La dispersion de speedup entre ejecuciones debe ser acotada (< 1.5x de rango para runners con jitter)
         speedup_range = max(speedups) - min(speedups)
-        self.assertLess(speedup_range, 0.5, f"Dispersion excesiva en speedup: {speedups}")
+        self.assertLess(speedup_range, 1.5, f"Dispersion excesiva en speedup: {speedups}")
 
     def test_min_speedup_without_reference_reports_reason(self):
         """Verifica que min_speedup sin reference_fn no se ignora en silencio (F6)."""

@@ -61,6 +61,8 @@ def validate_contracts(data: Any) -> None:
 
 
 class ContractEngine:
+    _RAW_CONTRACTS_CACHE: Dict[Tuple[str, float], Dict[str, Any]] = {}
+
     def __init__(
         self, contracts_path: Optional[str] = None,
         *, object_contracts: Optional[Dict[str, Any]] = None,
@@ -75,13 +77,30 @@ class ContractEngine:
         self._load_contracts()
         if object_contracts is not None:
             validate_contracts({"objects": object_contracts})
-            self._contracts.update(object_contracts)
+            for name, contract in object_contracts.items():
+                self._contracts[name] = {
+                    "inlets": self._normalize_ports(contract.get("inlets", [])),
+                    "outlets": self._normalize_ports(contract.get("outlets", []))
+                }
 
     def _load_contracts(self) -> None:
-        with open(self.contracts_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        validate_contracts(data)
-        self._contracts = data["objects"]
+        path_obj = self.contracts_path.resolve()
+        mtime = path_obj.stat().st_mtime_ns if path_obj.exists() else 0
+        cache_key = (str(path_obj), mtime)
+        if cache_key in self._RAW_CONTRACTS_CACHE:
+            data = self._RAW_CONTRACTS_CACHE[cache_key]
+        else:
+            with open(self.contracts_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            validate_contracts(data)
+            self._RAW_CONTRACTS_CACHE[cache_key] = data
+
+        self._contracts = {}
+        for name, contract in data["objects"].items():
+            self._contracts[name] = {
+                "inlets": self._normalize_ports(contract.get("inlets", [])),
+                "outlets": self._normalize_ports(contract.get("outlets", []))
+            }
 
     @classmethod
     def from_ir(cls, ir: Dict[str, Any]) -> "ContractEngine":
@@ -90,8 +109,8 @@ class ContractEngine:
         for direction in ("inlets", "outlets"):
             ports = ir.get(direction, [])
             contract[direction] = [
-                {**port, "name": port.get("name") or f"{direction}_{port['id']}"}
-                for port in ports
+                {**port, "name": port.get("name") or f"{direction}_{port.get('id', i)}"}
+                for i, port in enumerate(ports)
             ]
         return cls(object_contracts={ir["object_name"]: contract})
 
@@ -101,22 +120,131 @@ class ContractEngine:
         tokens = str(obj_name).strip().split()
         return tokens[0] if tokens else ""
 
+    @staticmethod
+    def _synthesize_dynamic_contract(base_name: str, args: List[str]) -> Dict[str, Any]:
+        """
+        Synthesize dynamic inlet/outlet port layout for variable-arity Max objects:
+        unpack, pack, trigger (t), route.
+        """
+        if base_name == "unpack":
+            outlets = []
+            for i, arg in enumerate(args):
+                arg_l = arg.lower()
+                if arg_l.startswith("f") or "." in arg:
+                    port_type = "float"
+                elif arg_l.startswith("i") or arg.lstrip("-").isdigit():
+                    port_type = "int"
+                elif arg_l.startswith("s"):
+                    port_type = "symbol"
+                else:
+                    port_type = "anything"
+                outlets.append({
+                    "id": i,
+                    "name": f"element_{i}",
+                    "type": port_type,
+                    "aliases": [f"elem_{i}", f"val_{i}"]
+                })
+            return {
+                "inlets": [{"id": 0, "name": "input_list", "type": "list", "aliases": ["input", "list_in"]}],
+                "outlets": outlets
+            }
+
+        elif base_name == "pack":
+            inlets = []
+            for i, arg in enumerate(args):
+                arg_l = arg.lower()
+                if arg_l.startswith("f") or "." in arg:
+                    port_type = "float"
+                elif arg_l.startswith("i") or arg.lstrip("-").isdigit():
+                    port_type = "int"
+                elif arg_l.startswith("s"):
+                    port_type = "symbol"
+                else:
+                    port_type = "anything"
+                inlets.append({
+                    "id": i,
+                    "name": f"element_{i}",
+                    "type": port_type,
+                    "aliases": [f"elem_{i}", f"inlet_{i}"]
+                })
+            return {
+                "inlets": inlets,
+                "outlets": [{"id": 0, "name": "packed_list", "type": "list", "aliases": ["list_out", "output"]}]
+            }
+
+        elif base_name in ("trigger", "t"):
+            outlets = []
+            for i, arg in enumerate(args):
+                arg_l = arg.lower()
+                if arg_l in ("b", "bang"):
+                    port_type = "bang"
+                elif arg_l in ("i", "int"):
+                    port_type = "int"
+                elif arg_l in ("f", "float") or "." in arg:
+                    port_type = "float"
+                elif arg_l in ("s", "symbol", "sym"):
+                    port_type = "symbol"
+                elif arg_l in ("l", "list"):
+                    port_type = "list"
+                elif arg.lstrip("-").isdigit():
+                    port_type = "int"
+                else:
+                    port_type = "anything"
+                outlets.append({
+                    "id": i,
+                    "name": f"outlet_{i}",
+                    "type": port_type,
+                    "aliases": [f"out_{i}"]
+                })
+            return {
+                "inlets": [{"id": 0, "name": "input_value", "type": "anything", "aliases": ["input"]}],
+                "outlets": outlets
+            }
+
+        elif base_name == "route":
+            outlets = []
+            for i, arg in enumerate(args):
+                outlets.append({
+                    "id": i,
+                    "name": f"match_{arg}",
+                    "type": "anything",
+                    "aliases": [f"match_{i}", arg]
+                })
+            outlets.append({
+                "id": len(args),
+                "name": "unmatched_pass",
+                "type": "anything",
+                "aliases": ["pass_through", "unmatched", "nomatch"]
+            })
+            return {
+                "inlets": [{"id": 0, "name": "input_message", "type": "anything", "aliases": ["input"]}],
+                "outlets": outlets
+            }
+
+        return {}
+
     def get_object_contract(self, obj_name: str) -> Optional[Dict[str, Any]]:
-        base_name = self._base_name(obj_name)
-        if not base_name:
+        tokens = str(obj_name).strip().split()
+        if not tokens:
             return None
+        base_name = tokens[0]
+        args = tokens[1:]
+
+        # Dynamic arity synthesis for parameterized objects
+        if args and base_name in ("unpack", "pack", "trigger", "t", "route"):
+            return self._synthesize_dynamic_contract(base_name, args)
+
         return self._contracts.get(base_name)
 
     def _normalize_ports(self, ports_data: Union[Dict[str, Any], List[Any]]) -> List[Dict[str, Any]]:
         """Convierte diccionario {"0": {...}, "1": {...}} o lista en una lista indexada en base 0."""
         if isinstance(ports_data, dict):
-            # Ordenar por clave numérica
             res = []
             for k in sorted(ports_data.keys(), key=lambda x: int(x) if x.isdigit() else 999):
                 res.append(ports_data[k])
             return res
         elif isinstance(ports_data, list):
-            return ports_data
+            return list(ports_data)
         return []
 
     def get_inlets(self, obj_name: str) -> List[Dict[str, Any]]:
@@ -134,7 +262,7 @@ class ContractEngine:
     @staticmethod
     def port_types(port: Dict[str, Any]) -> set:
         """Normalize a declared union without changing its source representation."""
-        declared = port["type"]
+        declared = port.get("type", "anything")
         values = [declared] if isinstance(declared, str) else declared
         return {part for value in values for part in value.split("/")}
 
@@ -159,8 +287,35 @@ class ContractEngine:
         ]
         if len(matches) == 1:
             return matches[0]
+        avail = [p.get("name") for p in inlets]
         raise IncompatibleConnectionError(
-            f"Inlet role {semantic_role!r} is unknown or ambiguous for {obj_name!r}."
+            f"Inlet role {semantic_role!r} is unknown or ambiguous for {obj_name!r}. Available inlets: {avail}"
+        )
+
+    def resolve_outlet_index(self, obj_name: str, semantic_role: str) -> int:
+        """
+        Resuelve el índice físico de un outlet a partir de su rol semántico
+        (ej: "audio_out", "envelope_signal", "voice_index").
+        """
+        outlets = self.get_outlets(obj_name)
+        role_lower = semantic_role.strip().lower()
+        if not role_lower:
+            raise IncompatibleConnectionError("An outlet role must not be empty.")
+
+        exact = [
+            idx for idx, port in enumerate(outlets)
+            if role_lower in [port.get("name", "").lower(),
+                              *[alias.lower() for alias in port.get("aliases", [])]]
+        ]
+        matches = exact or [
+            idx for idx, port in enumerate(outlets)
+            if role_lower in port.get("name", "").lower()
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        avail = [p.get("name") for p in outlets]
+        raise IncompatibleConnectionError(
+            f"Outlet role {semantic_role!r} is unknown or ambiguous for {obj_name!r}. Available outlets: {avail}"
         )
 
     def assess_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> ConnectionAssessment:
@@ -172,37 +327,76 @@ class ContractEngine:
             if type(index) is not int or index < 0:
                 return ConnectionAssessment("INVALID", "Port indices must be non-negative integers.")
 
-        # Regla 1: Prohibición absoluta de conexiones a comment
+        # Regla: Prohibición absoluta de conexiones a o desde comment
         if dest_base == "comment":
             return ConnectionAssessment("INVALID", "Cajas 'comment' carecen de inlets funcionales; conexión ilegal.")
+        if src_base == "comment":
+            return ConnectionAssessment("INVALID", "Cajas 'comment' carecen de outlets funcionales; conexión ilegal.")
 
-        src_contract = self.get_object_contract(src_base)
-        dest_contract = self.get_object_contract(dest_base)
+        src_contract = self.get_object_contract(src_obj)
+        dest_contract = self.get_object_contract(dest_obj)
 
-        src_outlets = self.get_outlets(src_base)
-        dest_inlets = self.get_inlets(dest_base)
+        src_outlets = self.get_outlets(src_obj)
+        dest_inlets = self.get_inlets(dest_obj)
 
         if src_contract is not None and src_outlet >= len(src_outlets):
-            return ConnectionAssessment("INVALID", f"Outlet {src_outlet} is outside the declared contract for {src_base}.")
+            max_idx = max(0, len(src_outlets) - 1)
+            return ConnectionAssessment("INVALID", f"Outlet {src_outlet} is outside the declared contract for {src_obj} (range 0..{max_idx}).")
         if dest_contract is not None and dest_inlet >= len(dest_inlets):
-            return ConnectionAssessment("INVALID", f"Inlet {dest_inlet} is outside the declared contract for {dest_base}.")
+            max_idx = max(0, len(dest_inlets) - 1)
+            return ConnectionAssessment("INVALID", f"Inlet {dest_inlet} is outside the declared contract for {dest_obj} (range 0..{max_idx}).")
         if src_contract is None or dest_contract is None:
-            return ConnectionAssessment("UNVERIFIABLE", "UNVERIFIABLE: missing object contract.")
+            missing = src_obj if src_contract is None else dest_obj
+            return ConnectionAssessment("UNVERIFIABLE", f"UNVERIFIABLE: missing object contract for {missing!r}.")
 
-        src_type = src_outlets[src_outlet].get("type", "anything")
-        dest_type = dest_inlets[dest_inlet].get("type", "anything")
-        src_types = self.port_types(src_outlets[src_outlet])
-        dest_types = self.port_types(dest_inlets[dest_inlet])
+        src_port = src_outlets[src_outlet]
+        dest_port = dest_inlets[dest_inlet]
+        src_type = src_port.get("type", "anything")
+        dest_type = dest_port.get("type", "anything")
+        src_types = self.port_types(src_port)
+        dest_types = self.port_types(dest_port)
 
         # Regla MSP: señal de audio a señal de audio (auto-summing)
         if "signal" in src_types and "signal" in dest_types:
             return ConnectionAssessment("VALID", "Conexión de signal MSP válida con auto-summing.")
 
-        # Control a señal o viceversa
-        if "signal" in src_types and not dest_types.intersection({"signal", "anything"}):
-            return ConnectionAssessment("INVALID", f"Desajuste de tipos: señal de audio ({src_type}) hacia inlet de control ({dest_type}).")
+        # Audio signal hacia inlet de control o message (incluso anything) -> Ilegal en Max MSP
+        if "signal" in src_types and "signal" not in dest_types:
+            return ConnectionAssessment(
+                "INVALID",
+                f"Desajuste de tipos: señal de audio ({src_type}) hacia inlet de control ({dest_type})."
+            )
 
-        return ConnectionAssessment("VALID", "Conexión válida.")
+        # Control message hacia inlet exclusivo de señal -> Ilegal en Max MSP
+        if "signal" not in src_types and dest_types == {"signal"}:
+            return ConnectionAssessment(
+                "INVALID",
+                f"Desajuste de tipos: mensaje de control ({src_type}) hacia inlet exclusivo de señal ({dest_type})."
+            )
+
+        # Control message hacia inlet que acepta signal + control o puramente control
+        allowed_dest = dest_types - {"signal"} if "signal" in dest_types else dest_types
+
+        if "anything" in src_types or "anything" in allowed_dest:
+            return ConnectionAssessment("VALID", "Conexión válida.")
+
+        if src_types.intersection(allowed_dest):
+            return ConnectionAssessment("VALID", "Conexión válida.")
+
+        # Coerción numérica en Max (int <-> float <-> number)
+        numeric_types = {"int", "float", "number"}
+        if src_types.intersection(numeric_types) and allowed_dest.intersection(numeric_types):
+            return ConnectionAssessment("VALID", "Conexión numérica válida con coerción automática.")
+
+        # Triggers bang
+        if "bang" in src_types and allowed_dest:
+            return ConnectionAssessment("VALID", "Conexión válida de disparo (bang).")
+
+        # List unpacking a escalar
+        if "list" in src_types and allowed_dest.intersection(numeric_types):
+            return ConnectionAssessment("VALID", "Conexión válida con extracción del primer elemento de lista.")
+
+        return ConnectionAssessment("INVALID", f"Desajuste de tipos de control: {src_type} no es compatible con {dest_type}.")
 
     def is_valid_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> Tuple[bool, str]:
         """Legacy tuple interface; unverifiable is not valid."""
