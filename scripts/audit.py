@@ -35,7 +35,7 @@ import argparse
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict, Any, NamedTuple
 
 # El script se ejecuta como `python scripts/audit.py`: la raiz del repo debe estar
 # en sys.path para importar el motor de procedencia.
@@ -94,7 +94,7 @@ PROVENANCE_BLOCKING_VERDICTS = (
 )
 
 
-def audit_provenance(patcher_path: Path) -> Tuple[Optional[str], List[str]]:
+def audit_provenance(patcher_path: Path, ir_path: Optional[Path] = None) -> Tuple[Optional[str], List[str]]:
     """
     Certifica la procedencia del paquete que contiene el patcher.
 
@@ -107,7 +107,7 @@ def audit_provenance(patcher_path: Path) -> Tuple[Optional[str], List[str]]:
         return None, []
 
     try:
-        return verify_provenance(record)
+        return verify_provenance(record, current_ir_path=ir_path)
     except Exception as e:
         return "UNVERIFIABLE", [
             f"Error al verificar la procedencia: {e}",
@@ -173,16 +173,25 @@ def _as_port_index(value: Any) -> Optional[int]:
     return int(value)
 
 
-def audit_contracts(patcher_path: Path) -> Tuple[Optional[List[str]], int]:
+class ContractAudit(NamedTuple):
+    violations: Optional[List[str]]
+    checked: int
+    unverifiable: List[str]
+
+
+def assess_patcher_contracts(
+    patcher_path: Path, contract_engine: Optional[ContractEngine] = None,
+) -> ContractAudit:
     """
     Valida los patchcords del patcher contra `core/schema/max_contracts.json`.
 
     Recorre el documento nativo de Max y evalua cada cable con
-    `ContractEngine.is_valid_connection`, la misma puerta que usa el emisor
+    `ContractEngine.assess_connection`, la misma puerta que usa el emisor
     (`TypedPatch.connect`). No hay numeros de inlet/outlet codificados aqui: el
-    motor resuelve los contratos y es permisivo con objetos sin contrato.
+    motor distingue conexiones ilegales y evidencia de contratos ausente.
 
-    Devuelve (violaciones, cables_evaluados) donde `violaciones` es `None` cuando
+    Devuelve violaciones, cables evaluados y conexiones no verificables.
+    `violations` es `None` cuando
     el archivo no expone un contenedor `patcher` nativo: en ese caso no hay
     contratos que validar y el veredicto lo declara explicitamente.
     Lanza `PatcherDocumentError` si el archivo no es JSON legible.
@@ -200,10 +209,11 @@ def audit_contracts(patcher_path: Path) -> Tuple[Optional[List[str]], int]:
 
     containers = _maxpat_containers(document) if isinstance(document, dict) else []
     if not containers:
-        return None, 0
+        return ContractAudit(None, 0, [])
 
-    engine = ContractEngine()
+    engine = contract_engine or ContractEngine()
     violations: List[str] = []
+    unverifiable: List[str] = []
     checked = 0
 
     for container in containers:
@@ -241,16 +251,24 @@ def audit_contracts(patcher_path: Path) -> Tuple[Optional[List[str]], int]:
                 )
                 continue
 
-            valid, reason = engine.is_valid_connection(
+            result = engine.assess_connection(
                 src_box["text"], src_outlet, dest_box["text"], dest_inlet
             )
-            if not valid:
-                violations.append(
+            if result.status != "VALID":
+                issues = violations if result.status == "INVALID" else unverifiable
+                issues.append(
                     f"{src_label} outlet {src_outlet} -> {dest_label} "
-                    f"inlet {dest_inlet}: {reason}"
+                    f"inlet {dest_inlet}: {result.reason}"
                 )
 
-    return violations, checked
+    return ContractAudit(violations, checked, unverifiable)
+
+
+def audit_contracts(patcher_path: Path) -> Tuple[Optional[List[str]], int]:
+    """Legacy tuple interface; missing evidence is reported, never silently valid."""
+    result = assess_patcher_contracts(patcher_path)
+    issues = None if result.violations is None else result.violations + result.unverifiable
+    return issues, result.checked
 
 
 def resolve_max_executable() -> Optional[Path]:
@@ -449,11 +467,14 @@ def evaluate_session(lines: List[str]) -> Tuple[str, List[str]]:
     return "PASS", details
 
 
-def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> Tuple[str, List[str]]:
+def audit_patcher_live(
+    patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    *, ir_path: Optional[Path] = None,
+) -> Tuple[str, List[str]]:
     """
     Ejecuta el patcher en Max.exe y audita la sesion de log resultante.
     Devuelve (veredicto, detalle_lineas).
-    Veredictos posibles: PASS, FAIL, BLOCKED, y los de procedencia
+    Veredictos posibles: PASS, FAIL, BLOCKED, UNVERIFIABLE, y los de procedencia
     (STALE_CONTRACTS, STALE_IR, STALE_SOURCE, STALE_ARTIFACTS,
     UNVERIFIABLE, INVALID) cuando el paquete trae emitted-from.json.
     Orden: primero las puertas estaticas (procedencia, luego contratos), despues la
@@ -477,7 +498,7 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     #
     # Procedencia primero: un paquete emitido contra un esquema anterior conserva su
     # propio veredicto y no se juzga contra un esquema para el que no fue emitido.
-    prov_verdict, prov_details = audit_provenance(patcher_path)
+    prov_verdict, prov_details = audit_provenance(patcher_path, ir_path=ir_path)
     if prov_verdict is not None and prov_verdict != "VALID":
         return prov_verdict, [
             f"Procedencia rechazada: {PROVENANCE_RECORD_NAME} no certifica este paquete.",
@@ -489,12 +510,22 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
     # arrancar Max. Un cable ilegal no gasta un arranque del runtime ni recibe un
     # PASS que el contrato no respalda.
     try:
-        contract_violations, contract_checked = audit_contracts(patcher_path)
+        if ir_path is not None:
+            if prov_verdict != "VALID":
+                return "UNVERIFIABLE", ["An IR contract requires matching emitted-from.json provenance."]
+            ir = json.loads(Path(ir_path).read_text(encoding="utf-8"))
+            engine = ContractEngine.from_ir(ir)
+        else:
+            engine = ContractEngine()
+        contract_result = assess_patcher_contracts(patcher_path, engine)
+        contract_violations, contract_checked, unverifiable = contract_result
     except PatcherDocumentError as e:
         return "FAIL", [
             str(e),
             "Un patcher ilegible no puede cargarse en Max: no se emite PASS.",
         ]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return "UNVERIFIABLE", [f"Contract evidence could not be validated: {e}"]
 
     if contract_violations:
         return "FAIL", [
@@ -503,12 +534,18 @@ def audit_patcher_live(patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOU
             *contract_violations[:20],
             "Corregir el emisor o el IR antes de auditar: no se emite PASS.",
         ]
+    if unverifiable:
+        return "UNVERIFIABLE", [
+            "Missing contracts: static validation is incomplete; no PASS is issued.",
+            *unverifiable[:20],
+            "Supply catalog contracts, or --ir with matching package provenance for a generated object.",
+        ]
 
     # Recien aqui se requiere el runtime: las puertas estaticas ya aprobaron.
     max_exe = resolve_max_executable()
     if not max_exe:
         return "BLOCKED", [
-            "Max.exe no fue detectado en el sistema.",
+            "BLOCKED (RUNTIME_UNAVAILABLE): Max.exe no fue detectado en el sistema.",
             "Contrato Harmos: Prohibido emitir PASS sin ejecucion en vivo.",
             "Instale Cycling '74 Max o configure la variable MAX_PATH.",
         ]
@@ -597,6 +634,10 @@ def main():
     parser = argparse.ArgumentParser(description="Harmos Live Runtime Verifier")
     parser.add_argument("--patcher", type=str, required=True, help="Ruta al archivo .maxpat objetivo")
     parser.add_argument(
+        "--ir", type=Path, default=None,
+        help="IR contract for a generated object; must match emitted-from.json provenance.",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT_SECONDS,
@@ -606,7 +647,7 @@ def main():
     args = parser.parse_args()
 
     patcher = Path(args.patcher)
-    verdict, details = audit_patcher_live(patcher, timeout_seconds=args.timeout)
+    verdict, details = audit_patcher_live(patcher, timeout_seconds=args.timeout, ir_path=args.ir)
 
     print("\n" + "=" * 50)
     print(f" HARMOS LIVE AUDIT: {verdict}")

@@ -3,6 +3,9 @@ Tests TDD para Contratos MSP de Síntesis y Polifonía (FM, Hard-Sync, Poly~, En
 Vertical Slice 1: Nuevos contratos en core/schema/max_contracts.json.
 """
 import unittest
+import json
+import tempfile
+from pathlib import Path
 from core.compiler.contract_engine import ContractEngine, IncompatibleConnectionError
 
 
@@ -107,20 +110,70 @@ class TestContractEngineRobustness(unittest.TestCase):
     def setUp(self):
         self.engine = ContractEngine()
 
+    def test_connection_assessment_distinguishes_missing_evidence(self):
+        for args, expected in [
+            (("cycle~", 0, "gain~", 0), "VALID"),
+            (("cycle~", 0, "mtof", 0), "INVALID"),
+            (("unknown.external", 0, "gain~", 0), "UNVERIFIABLE"),
+            (("cycle~", -1, "gain~", 0), "INVALID"),
+            (("cycle~", 0, "gain~", 9), "INVALID"),
+            (("unknown.external", 0, "gain~", 9), "INVALID"),
+        ]:
+            with self.subTest(args=args):
+                result = self.engine.assess_connection(*args)
+                self.assertEqual(expected, result.status)
+                self.assertTrue(result.reason)
+                valid, reason = self.engine.is_valid_connection(*args)
+                self.assertEqual(expected == "VALID", valid)
+                self.assertTrue(reason)
+
     def test_empty_object_name_has_no_contract(self):
         self.assertIsNone(self.engine.get_object_contract(""))
         self.assertIsNone(self.engine.get_object_contract("   "))
         self.assertEqual([], self.engine.get_inlets(""))
         self.assertEqual([], self.engine.get_outlets(""))
 
-    def test_connection_with_empty_object_name_is_permissive(self):
+    def test_connection_with_empty_object_name_is_unverifiable(self):
         valid, reason = self.engine.is_valid_connection("", 0, "mtof", 0)
-        self.assertTrue(valid, reason)
+        self.assertFalse(valid)
+        self.assertIn("UNVERIFIABLE", reason)
         valid, reason = self.engine.is_valid_connection("cycle~ 440", 0, "", 0)
-        self.assertTrue(valid, reason)
+        self.assertFalse(valid)
+        self.assertIn("UNVERIFIABLE", reason)
 
-    def test_resolve_inlet_index_without_text_falls_back_to_zero(self):
-        self.assertEqual(0, self.engine.resolve_inlet_index("", "pitch"))
+    def test_semantic_resolution_never_guesses_a_port(self):
+        self.assertEqual(2, self.engine.resolve_inlet_index("midiformat", "cc"))
+        self.assertEqual(3, self.engine.resolve_inlet_index("midiformat", "program_change"))
+        self.assertEqual(1, self.engine.resolve_inlet_index("lores~", "cutoff"))
+        for obj, role in [("", "pitch"), ("midiformat", "velocity"),
+                          ("midiformat", "after"), ("cycle~", "")]:
+            with self.subTest(obj=obj, role=role):
+                with self.assertRaises(IncompatibleConnectionError):
+                    self.engine.resolve_inlet_index(obj, role)
+
+    def test_malformed_catalog_is_rejected_instead_of_normalized(self):
+        valid = {"objects": {"example": {
+            "inlets": {"0": {"name": "input", "type": "signal/float"}},
+            "outlets": [],
+        }}}
+        malformed = [
+            {}, {"objects": []},
+            {"objects": {"example": {"inlets": [], "outlets": [{"type": "float"}]}}},
+            {"objects": {"example": {"inlets": [], "outlets": [{"name": "out", "type": "OUTLET_TYPE"}]}}},
+            {"objects": {"example": {"inlets": {"3": {"name": "input", "type": "float"}}, "outlets": []}}},
+            {"objects": {"example": {"inlets": [{"id": 2, "name": "input", "type": "float"}], "outlets": []}}},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "contracts.json"
+            path.write_text(json.dumps(valid), encoding="utf-8")
+            self.assertEqual("signal/float", ContractEngine(str(path)).get_inlets("example")[0]["type"])
+            for data in malformed:
+                with self.subTest(data=data):
+                    path.write_text(json.dumps(data), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        ContractEngine(str(path))
+            with self.assertRaises(OSError):
+                ContractEngine(str(Path(tmp) / "missing.json"))
 
 
 if __name__ == "__main__":

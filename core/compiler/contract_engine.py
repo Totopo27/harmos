@@ -4,7 +4,7 @@ Consume core/schema/max_contracts.json.
 """
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, NamedTuple, Optional, Tuple, Union
 
 
 class IncompatibleConnectionError(ValueError):
@@ -12,8 +12,59 @@ class IncompatibleConnectionError(ValueError):
     pass
 
 
+class ConnectionAssessment(NamedTuple):
+    status: str
+    reason: str
+
+
+def validate_contracts(data: Any) -> None:
+    """Validate the supported catalog structure, not general JSON Schema."""
+    if not isinstance(data, dict) or not isinstance(data.get("objects"), dict):
+        raise ValueError("Contract catalog must contain an objects mapping.")
+    supported_types = {"signal", "float", "int", "number", "symbol", "list", "bang", "anything"}
+    for name, contract in data["objects"].items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(contract, dict):
+            raise ValueError("Each object must have a non-empty name and a contract mapping.")
+        for direction in ("inlets", "outlets"):
+            ports = contract.get(direction)
+            if isinstance(ports, dict):
+                keys = {str(i) for i in range(len(ports))}
+                if set(ports) != keys:
+                    raise ValueError(f"{name}.{direction}: indices must be contiguous from zero.")
+                ports = [ports[str(i)] for i in range(len(ports))]
+            if not isinstance(ports, list):
+                raise ValueError(f"{name}.{direction}: expected a list or indexed mapping.")
+            roles = set()
+            for index, port in enumerate(ports):
+                if not isinstance(port, dict) or not isinstance(port.get("name"), str) or not port["name"].strip():
+                    raise ValueError(f"{name}.{direction}: each port needs a non-empty semantic name.")
+                if "id" in port and (type(port["id"]) is not int or port["id"] != index):
+                    raise ValueError(f"{name}.{direction}: port id does not match its physical index.")
+                declared = port.get("type")
+                values = [declared] if isinstance(declared, str) else declared
+                if (not isinstance(values, list) or not values
+                        or any(not isinstance(value, str) or not value for value in values)):
+                    raise ValueError(f"{name}.{direction}: each port needs declared types.")
+                types = {part for value in values for part in value.split("/")}
+                if not types <= supported_types:
+                    raise ValueError(f"{name}.{direction}: unresolved or unsupported port type.")
+                aliases = port.get("aliases", [])
+                if not isinstance(aliases, list) or any(
+                    not isinstance(alias, str) or not alias.strip() for alias in aliases
+                ):
+                    raise ValueError(f"{name}.{direction}: aliases must be non-empty strings.")
+                for role in [port["name"], *aliases]:
+                    normalized = role.strip().lower()
+                    if normalized in roles:
+                        raise ValueError(f"{name}.{direction}: duplicate semantic role {role!r}.")
+                    roles.add(normalized)
+
+
 class ContractEngine:
-    def __init__(self, contracts_path: Optional[str] = None):
+    def __init__(
+        self, contracts_path: Optional[str] = None,
+        *, object_contracts: Optional[Dict[str, Any]] = None,
+    ):
         if contracts_path is None:
             base = Path(__file__).resolve().parent.parent / "schema" / "max_contracts.json"
             self.contracts_path = base
@@ -22,12 +73,27 @@ class ContractEngine:
 
         self._contracts: Dict[str, Any] = {}
         self._load_contracts()
+        if object_contracts is not None:
+            validate_contracts({"objects": object_contracts})
+            self._contracts.update(object_contracts)
 
     def _load_contracts(self) -> None:
-        if self.contracts_path.exists():
-            with open(self.contracts_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                self._contracts = data.get("objects", {})
+        with open(self.contracts_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        validate_contracts(data)
+        self._contracts = data["objects"]
+
+    @classmethod
+    def from_ir(cls, ir: Dict[str, Any]) -> "ContractEngine":
+        """Overlay only the generated object's declared ports; never persist them."""
+        contract = {}
+        for direction in ("inlets", "outlets"):
+            ports = ir.get(direction, [])
+            contract[direction] = [
+                {**port, "name": port.get("name") or f"{direction}_{port['id']}"}
+                for port in ports
+            ]
+        return cls(object_contracts={ir["object_name"]: contract})
 
     @staticmethod
     def _base_name(obj_name: str) -> str:
@@ -65,87 +131,91 @@ class ContractEngine:
             return self._normalize_ports(contract["outlets"])
         return []
 
+    @staticmethod
+    def port_types(port: Dict[str, Any]) -> set:
+        """Normalize a declared union without changing its source representation."""
+        declared = port["type"]
+        values = [declared] if isinstance(declared, str) else declared
+        return {part for value in values for part in value.split("/")}
+
     def resolve_inlet_index(self, obj_name: str, semantic_role: str) -> int:
         """
         Resuelve el índice físico de un inlet a partir de su rol semántico
         (ej: "pitch", "pitch_bend", "channel", "cutoff").
         """
         inlets = self.get_inlets(obj_name)
-        role_lower = semantic_role.lower()
+        role_lower = semantic_role.strip().lower()
+        if not role_lower:
+            raise IncompatibleConnectionError("An inlet role must not be empty.")
 
-        # 1. Búsqueda exacta por nombre
-        for idx, inl in enumerate(inlets):
-            if role_lower == inl.get("name", "").lower():
-                return idx
+        exact = [
+            idx for idx, port in enumerate(inlets)
+            if role_lower in [port.get("name", "").lower(),
+                              *[alias.lower() for alias in port.get("aliases", [])]]
+        ]
+        matches = exact or [
+            idx for idx, port in enumerate(inlets)
+            if role_lower in port.get("name", "").lower()
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        raise IncompatibleConnectionError(
+            f"Inlet role {semantic_role!r} is unknown or ambiguous for {obj_name!r}."
+        )
 
-        # 2. Búsqueda por subcadena en nombre
-        for idx, inl in enumerate(inlets):
-            if role_lower in inl.get("name", "").lower():
-                return idx
-
-        # 3. Búsqueda por coincidencia en descripción
-        for idx, inl in enumerate(inlets):
-            if role_lower in inl.get("description", "").lower():
-                return idx
-
-        # 2. Heurística canónica de fallback para objetos estándar de Max
-        base_name = self._base_name(obj_name)
-        if base_name == "midiformat":
-            mapping = {
-                "pitch": 0,
-                "note": 0,
-                "velocity": 1,
-                "vel": 1,
-                "poly_aftertouch": 2,
-                "cc": 3,
-                "control_change": 3,
-                "program_change": 4,
-                "pitch_bend": 5,
-                "bend": 5,
-                "channel": 6,
-                "chan": 6,
-            }
-            if role_lower in mapping:
-                return mapping[role_lower]
-
-        return 0
-
-    def is_valid_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> Tuple[bool, str]:
+    def assess_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> ConnectionAssessment:
+        """Assess declared evidence without treating missing contracts as approval."""
         src_base = self._base_name(src_obj)
         dest_base = self._base_name(dest_obj)
 
+        for index in (src_outlet, dest_inlet):
+            if type(index) is not int or index < 0:
+                return ConnectionAssessment("INVALID", "Port indices must be non-negative integers.")
+
         # Regla 1: Prohibición absoluta de conexiones a comment
         if dest_base == "comment":
-            return False, "Cajas 'comment' carecen de inlets funcionales; conexión ilegal."
+            return ConnectionAssessment("INVALID", "Cajas 'comment' carecen de inlets funcionales; conexión ilegal.")
 
         src_contract = self.get_object_contract(src_base)
         dest_contract = self.get_object_contract(dest_base)
 
-        if not src_contract or not dest_contract:
-            return True, "Validación permisiva: objeto sin contrato explícito."
-
         src_outlets = self.get_outlets(src_base)
         dest_inlets = self.get_inlets(dest_base)
 
-        if src_outlet >= len(src_outlets) or dest_inlet >= len(dest_inlets):
-            return True, "Índice fuera de rango formal; permitido por dinamismo de Max."
+        if src_contract is not None and src_outlet >= len(src_outlets):
+            return ConnectionAssessment("INVALID", f"Outlet {src_outlet} is outside the declared contract for {src_base}.")
+        if dest_contract is not None and dest_inlet >= len(dest_inlets):
+            return ConnectionAssessment("INVALID", f"Inlet {dest_inlet} is outside the declared contract for {dest_base}.")
+        if src_contract is None or dest_contract is None:
+            return ConnectionAssessment("UNVERIFIABLE", "UNVERIFIABLE: missing object contract.")
 
         src_type = src_outlets[src_outlet].get("type", "anything")
         dest_type = dest_inlets[dest_inlet].get("type", "anything")
+        src_types = self.port_types(src_outlets[src_outlet])
+        dest_types = self.port_types(dest_inlets[dest_inlet])
 
         # Regla MSP: señal de audio a señal de audio (auto-summing)
-        if src_type == "signal" and dest_type == "signal":
-            return True, "Conexión de signal MSP válida con auto-summing."
+        if "signal" in src_types and "signal" in dest_types:
+            return ConnectionAssessment("VALID", "Conexión de signal MSP válida con auto-summing.")
 
         # Control a señal o viceversa
-        if src_type == "signal" and dest_type not in ["signal", "anything"]:
-            return False, f"Desajuste de tipos: señal de audio ({src_type}) hacia inlet de control ({dest_type})."
+        if "signal" in src_types and not dest_types.intersection({"signal", "anything"}):
+            return ConnectionAssessment("INVALID", f"Desajuste de tipos: señal de audio ({src_type}) hacia inlet de control ({dest_type}).")
 
-        return True, "Conexión válida."
+        return ConnectionAssessment("VALID", "Conexión válida.")
 
-    def validate_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> None:
-        valid, reason = self.is_valid_connection(src_obj, src_outlet, dest_obj, dest_inlet)
-        if not valid:
+    def is_valid_connection(self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int) -> Tuple[bool, str]:
+        """Legacy tuple interface; unverifiable is not valid."""
+        result = self.assess_connection(src_obj, src_outlet, dest_obj, dest_inlet)
+        return result.status == "VALID", result.reason
+
+    def validate_connection(
+        self, src_obj: str, src_outlet: int, dest_obj: str, dest_inlet: int,
+        *, allow_unverifiable: bool = False,
+    ) -> ConnectionAssessment:
+        result = self.assess_connection(src_obj, src_outlet, dest_obj, dest_inlet)
+        if result.status == "INVALID" or (result.status == "UNVERIFIABLE" and not allow_unverifiable):
             raise IncompatibleConnectionError(
-                f"Conexión ilegal entre {src_obj} (outlet {src_outlet}) y {dest_obj} (inlet {dest_inlet}): {reason}"
+                f"Conexión ilegal entre {src_obj} (outlet {src_outlet}) y {dest_obj} (inlet {dest_inlet}): {result.reason}"
             )
+        return result

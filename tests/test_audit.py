@@ -371,10 +371,23 @@ class TestProvenanceGate(LogFixtureMixin, unittest.TestCase):
                     audit.subprocess, "Popen",
                     side_effect=lambda *a, **k: FakeProc(log, _session()),
                 ):
-            verdict, details = audit_patcher_live(patcher, timeout_seconds=3)
+            ir_path = patcher.parent.parent / "prov_obj.ir.json"
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=3, ir_path=ir_path)
 
         self.assertEqual("PASS", verdict)
         self.assertTrue(any("Procedencia verificada" in d for d in details))
+
+    def test_supplied_ir_must_match_recorded_provenance(self):
+        result = self._compile_package()
+        patcher = Path(result["maxpat_path"])
+        ir = patcher.parent.parent / "prov_obj.ir.json"
+        ir.write_text(ir.read_text(encoding="utf-8") + " ", encoding="utf-8")
+        before = patcher.read_bytes()
+        with mock.patch.object(audit, "resolve_max_executable") as resolver:
+            verdict, _ = audit_patcher_live(patcher, ir_path=ir)
+        self.assertEqual("STALE_IR", verdict)
+        resolver.assert_not_called()
+        self.assertEqual(before, patcher.read_bytes())
 
     def test_pass_without_record_discloses_uncertified_provenance(self):
         handle = tempfile.NamedTemporaryFile("w", suffix=".maxpat", delete=False, encoding="utf-8")
@@ -459,8 +472,7 @@ class TestContractGate(unittest.TestCase):
         self.assertEqual(1, len(violations))
         self.assertTrue(any("comment" in v for v in violations), violations)
 
-    def test_objects_without_contract_are_permissive(self):
-        """Sin contrato explicito no hay violacion: la puerta no inventa reglas."""
+    def test_objects_without_contract_are_unverifiable(self):
         patcher = self._write_patcher(
             [self._box("obj-1", "harmos.custom~ 1"), self._box("obj-2", "otro.custom 2")],
             [self._line("obj-1", 0, "obj-2", 0)],
@@ -469,7 +481,14 @@ class TestContractGate(unittest.TestCase):
         violations, checked = audit.audit_contracts(patcher)
 
         self.assertEqual(1, checked)
-        self.assertEqual([], violations)
+        self.assertEqual(1, len(violations))
+        self.assertIn("UNVERIFIABLE", violations[0])
+        before = patcher.read_bytes()
+        with mock.patch.object(audit, "resolve_max_executable") as resolver:
+            verdict, _ = audit_patcher_live(patcher)
+        self.assertEqual("UNVERIFIABLE", verdict)
+        resolver.assert_not_called()
+        self.assertEqual(before, patcher.read_bytes())
 
     def test_valid_signal_chain_has_no_violations(self):
         patcher = self._write_patcher(

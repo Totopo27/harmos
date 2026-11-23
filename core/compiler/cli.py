@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from core.compiler.typed_patch import TypedPatch
+from core.compiler.contract_engine import ContractEngine
 from core.compiler.ast_extractor import extract_ir_from_file
 from core.compiler.cpp_generator import generate_cpp_kernel, generate_min_wrapper
 from core.compiler.maxref_generator import write_maxref_file
@@ -238,7 +239,7 @@ def build_external(
 
 def generate_test_maxpat(ir: Dict[str, Any], output_path: str) -> None:
     object_name = ir.get("object_name", "my_object")
-    patch = TypedPatch()
+    patch = TypedPatch(ContractEngine.from_ir({**ir, "object_name": object_name}))
 
     # Caja del objeto sintetizado
     obj_box = patch.add_box(object_name, x=150.0, y=100.0)

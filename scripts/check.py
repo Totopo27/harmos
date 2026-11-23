@@ -4,7 +4,7 @@ Harmos Guardrail & Pre-Commit Verifier.
 Verifica de forma determinista antes de cada commit o PR:
 1. Suite completa de tests unitarios (tests/).
 2. Escaneo estatico de PII, rutas absolutas de host y secretos.
-3. Formato y sintaxis JSON de esquemas y contratos.
+3. Sintaxis JSON y estructura del catalogo de contratos (no JSON Schema general).
 """
 import sys
 import os
@@ -12,6 +12,12 @@ import subprocess
 import re
 import json
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from core.compiler.contract_engine import validate_contracts
 
 # Patrones prohibidos en archivos trackeados
 FORBIDDEN_PATTERNS = [
@@ -42,24 +48,32 @@ def run_unit_tests() -> bool:
         return False
 
 
-def validate_json_schemas() -> bool:
-    print("[2/3] Validando integridad de contratos y esquemas JSON...")
-    schema_dir = Path("core/schema")
+def validate_json_schemas(schema_dir: Path = Path("core/schema")) -> bool:
+    """Check syntax and supported catalog shape, not full Draft-07 conformance."""
+    print("[2/3] Validando sintaxis JSON y estructura del catalogo de contratos...")
     if not schema_dir.exists():
         print("  FAIL: Directorio core/schema no encontrado.")
         return False
 
     all_valid = True
+    catalog_seen = False
     for json_file in schema_dir.glob("*.json"):
         try:
             with open(json_file, "r", encoding="utf-8") as f:
-                json.load(f)
+                data = json.load(f)
             print(f"  OK {json_file.name}: JSON sintacticamente valido.")
+            if json_file.name == "max_contracts.json":
+                catalog_seen = True
+                validate_contracts(data)
+                print("  OK Estructura de contratos: indices, nombres, aliases y tipos declarados.")
         except Exception as e:
-            print(f"  FAIL: Error parseando {json_file.name}: {e}")
+            print(f"  FAIL: Sintaxis JSON o estructura invalida en {json_file.name}: {e}")
             all_valid = False
 
-    return all_valid
+    if not catalog_seen:
+        print("  FAIL: Falta max_contracts.json para validar la estructura de contratos.")
+    print("  Alcance: no valida JSON Schema general ni sustituye la auditoria en Max.")
+    return all_valid and catalog_seen
 
 
 def scan_for_leaks_and_pii() -> bool:

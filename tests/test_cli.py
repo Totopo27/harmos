@@ -9,7 +9,8 @@ import os
 import shutil
 from pathlib import Path
 
-from core.compiler.cli import compile_ir
+from core.compiler.cli import compile_ir, generate_test_maxpat
+from core.compiler.contract_engine import ContractEngine, IncompatibleConnectionError
 
 try:
     from core.compiler.cli import resolve_min_api_dir
@@ -26,6 +27,26 @@ class TestHarmosCLI(unittest.TestCase):
     def tearDown(self):
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+
+    def test_test_patcher_uses_ir_without_modifying_the_catalog(self):
+        ir = {
+            "object_name": "harmos.new_control",
+            "inlets": [{"id": 0, "type": "float", "description": "Input"}],
+            "outlets": [{"id": 0, "type": "float", "description": "Output"}],
+        }
+        catalog = Path("core/schema/max_contracts.json")
+        before = catalog.read_bytes()
+        path = Path(self.temp_dir) / "generated.maxpat"
+        generate_test_maxpat(ir, str(path))
+        patcher = json.loads(path.read_text(encoding="utf-8"))["patcher"]
+        self.assertEqual(2, len(patcher["lines"]))
+        self.assertIsNone(ContractEngine().get_object_contract(ir["object_name"]))
+        self.assertEqual(before, catalog.read_bytes())
+        original = path.read_bytes()
+        ir["inlets"][0]["id"] = 3
+        with self.assertRaises((ValueError, IncompatibleConnectionError)):
+            generate_test_maxpat(ir, str(path))
+        self.assertEqual(original, path.read_bytes())
 
     def test_compile_control_ir_generates_maxpat_and_cpp(self):
         # IR de prueba válida

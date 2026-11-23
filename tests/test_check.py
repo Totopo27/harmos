@@ -8,8 +8,13 @@ no contenga rutas literales que el guardrail deba rechazar.
 """
 import re
 import unittest
+import contextlib
+import io
+import json
+import tempfile
+from pathlib import Path
 
-from scripts.check import FORBIDDEN_PATTERNS, SCANNED_EXTENSIONS
+from scripts.check import FORBIDDEN_PATTERNS, SCANNED_EXTENSIONS, validate_json_schemas
 
 BACKSLASH = "\\"
 FORWARD_SLASH = "/"
@@ -46,6 +51,32 @@ class TestForbiddenPatterns(unittest.TestCase):
     def test_scanned_extensions_include_yaml(self):
         self.assertIn(".yml", SCANNED_EXTENSIONS)
         self.assertIn(".yaml", SCANNED_EXTENSIONS)
+
+class TestContractStructureCheck(unittest.TestCase):
+    def test_parseable_json_is_not_sufficient_contract_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            catalog = root / "max_contracts.json"
+            for data, expected in [
+                ({}, False),
+                ({"objects": {"demo": {"inlets": [], "outlets": [{"name": "out", "type": "OUTLET_TYPE"}]}}}, False),
+                ({"objects": {"demo": {"inlets": [], "outlets": [{"name": "out", "type": ["float", "list"]}]}}}, True),
+            ]:
+                with self.subTest(data=data):
+                    catalog.write_text(json.dumps(data), encoding="utf-8")
+                    before = catalog.read_bytes()
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        self.assertEqual(expected, validate_json_schemas(root))
+                    self.assertEqual(before, catalog.read_bytes())
+                    self.assertIn("JSON", output.getvalue())
+                    self.assertIn("estructura", output.getvalue().lower())
+            catalog.write_text("{", encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertFalse(validate_json_schemas(root))
+            catalog.unlink()
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertFalse(validate_json_schemas(root))
 
 
 if __name__ == "__main__":
