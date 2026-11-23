@@ -37,10 +37,11 @@ refactorización arquitectónica, contratos estrictos, calidad de tests y docume
 
 - [x] T1 (S1-S6) [inline]: Fase 1 — Cimientos Críticos: Validación bidireccional en assess_connection, aridad dinámica en ContractEngine, corrección de zero-hardcoding en tests, tests herméticos/deterministas y compuerta de auditoría en patchers sintetizados. Commit: c4e8281
 - [x] T2 (S7-S12) [inline]: Fase 2 — Endurecimiento de Esquemas y Contratos: Corrección de puertos trigger/gain~/coll/scale, uniones signal/float, validación de IR, lookup O(1) pre-normalizado, primitivas base y diagnósticos unificados. Commit: 000ecae
-- [ ] T3 (S13-S17) [inline]: Fase 3 — Robustecimiento de CI/CD y Scripts: Blindaje fail-closed de check.py, audit.py multiplataforma, bench.py, integración de ruff/mypy/coverage en CI y pipeline E2E.
-- [ ] T4 (S18-S23) [inline]: Fase 4 — Refactorización y Separación de Dominios: Desacoplamiento de kernels downstream de cpp_headless_runner, modularización de funciones monolíticas, lazy evaluation en microtonal_engine, optimización de benchmarking y eliminación de dead code.
-- [ ] T5 (S24-S28) [inline]: Fase 5 — Gobernanza y Documentación Arquitectónica: Sincronización de README y arquitectura con el compilador real, redacción de ADRs 0006-0011, actualización de GLOSSARY.md, licenciamiento Apache-2.0 y cierre de tareas ODD.
+- [x] T3 (S13-S17) [inline]: Fase 3 — Robustecimiento de CI/CD y Scripts: Blindaje fail-closed de check.py, audit.py multiplataforma, bench.py, integración de ruff/mypy/coverage en CI y pipeline E2E. Commit: 66ca9b6
+- [x] T4 (S18-S23) [inline]: Fase 4 — Refactorización y Separación de Dominios: Desacoplamiento de kernels downstream de cpp_headless_runner, modularización de funciones monolíticas, lazy evaluation en microtonal_engine, optimización de benchmarking y eliminación de dead code. Commit: 75b1ba0
+- [x] T5 (S24-S28) [inline]: Fase 5 — Gobernanza y Documentación Arquitectónica: Sincronización de README y arquitectura con el compilador real, redacción de ADRs 0006-0011, actualización de GLOSSARY.md, licenciamiento Apache-2.0 y cierre de tareas ODD. Commit: 6e8d713
 
 ## Log
 
 - L1: "ve una por una resolviendo absolutamente todas las fases con los puntos de mejora que encontraste" — Autorización completa para abordar las 5 fases sistemáticamente.
+- L2: Completadas las 5 fases de optimización (T1: c4e8281, T2: 000ecae, T3: 66ca9b6, T4: 75b1ba0, T5: 6e8d713). 183 tests pasando al 100%, guardrails blindados, ADRs sincronizados y arquitectura formalizada. Feature cerrada con éxito.
