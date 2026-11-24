@@ -4,6 +4,7 @@ Vertical Slice 1: Nuevos contratos en core/schema/max_contracts.json.
 """
 import unittest
 import json
+import os
 import tempfile
 from pathlib import Path
 from core.compiler.contract_engine import ContractEngine, IncompatibleConnectionError
@@ -18,7 +19,7 @@ class TestMSPContractEngine(unittest.TestCase):
         mul_inlets = self.engine.get_inlets("*~")
         self.assertGreaterEqual(len(mul_inlets), 2)
         self.assertEqual(mul_inlets[0]["type"], "signal")
-        self.assertEqual(mul_inlets[1]["type"], "signal")
+        self.assertEqual(mul_inlets[1]["type"], "signal/float")
         mul_outlets = self.engine.get_outlets("*~")
         self.assertEqual(len(mul_outlets), 1)
         self.assertEqual(mul_outlets[0]["type"], "signal")
@@ -27,7 +28,7 @@ class TestMSPContractEngine(unittest.TestCase):
         add_inlets = self.engine.get_inlets("+~")
         self.assertGreaterEqual(len(add_inlets), 2)
         self.assertEqual(add_inlets[0]["type"], "signal")
-        self.assertEqual(add_inlets[1]["type"], "signal")
+        self.assertEqual(add_inlets[1]["type"], "signal/float")
         add_outlets = self.engine.get_outlets("+~")
         self.assertEqual(len(add_outlets), 1)
         self.assertEqual(add_outlets[0]["type"], "signal")
@@ -36,7 +37,7 @@ class TestMSPContractEngine(unittest.TestCase):
         # phasor~ (rampa / acumulador de fase para sync y lectura de tablas)
         phasor_inlets = self.engine.get_inlets("phasor~")
         self.assertGreaterEqual(len(phasor_inlets), 1)
-        self.assertEqual(phasor_inlets[0]["type"], "signal")
+        self.assertEqual(phasor_inlets[0]["type"], "signal/float")
         phasor_outlets = self.engine.get_outlets("phasor~")
         self.assertEqual(phasor_outlets[0]["type"], "signal")
 
@@ -49,7 +50,7 @@ class TestMSPContractEngine(unittest.TestCase):
         # rect~ (oscilador de pulso / onda cuadrada con control de ancho)
         rect_inlets = self.engine.get_inlets("rect~")
         self.assertGreaterEqual(len(rect_inlets), 2)
-        self.assertEqual(rect_inlets[0]["type"], "signal")
+        self.assertEqual(rect_inlets[0]["type"], "signal/float")
         rect_outlets = self.engine.get_outlets("rect~")
         self.assertEqual(rect_outlets[0]["type"], "signal")
 
@@ -166,14 +167,42 @@ class TestContractEngineRobustness(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "contracts.json"
             path.write_text(json.dumps(valid), encoding="utf-8")
+            os.utime(path, ns=(1_000_000_000, 1_000_000_000))
             self.assertEqual("signal/float", ContractEngine(str(path)).get_inlets("example")[0]["type"])
             for data in malformed:
                 with self.subTest(data=data):
                     path.write_text(json.dumps(data), encoding="utf-8")
+                    # Keep the exact same nanosecond timestamp so Windows NTFS tick resolution cannot hide cache bugs.
+                    os.utime(path, ns=(1_000_000_000, 1_000_000_000))
                     with self.assertRaises(ValueError):
                         ContractEngine(str(path))
             with self.assertRaises(OSError):
                 ContractEngine(str(Path(tmp) / "missing.json"))
+
+    def test_control_float_reaches_signal_float_inlets(self):
+        # Max accepts a float on these inlets (it replaces the signal value).
+        for obj, inlet in [("*~", 1), ("+~", 1), ("-~", 1), ("phasor~", 0),
+                           ("saw~", 0), ("rect~", 0), ("tri~", 0), ("lores~", 1)]:
+            with self.subTest(obj=obj, inlet=inlet):
+                result = self.engine.assess_connection("flonum", 0, obj, inlet)
+                self.assertEqual("VALID", result.status, result.reason)
+        # Signal-only inlets still reject control messages.
+        self.assertEqual("INVALID", self.engine.assess_connection("flonum", 0, "dac~", 0).status)
+
+    def test_patcher_io_and_active_object_contracts(self):
+        expected = {
+            "inlet": (0, 1), "outlet": (1, 0), "inlet~": (0, 1), "outlet~": (1, 0),
+            "loadbang": (0, 1), "midiout": (2, 0), "sprintf": (1, 1),
+            "udpreceive": (1, 2), "udpsend": (2, 0), "jweb": (1, 2),
+        }
+        for obj, (n_in, n_out) in expected.items():
+            with self.subTest(obj=obj):
+                self.assertIsNotNone(self.engine.get_object_contract(obj))
+                self.assertEqual(n_in, len(self.engine.get_inlets(obj)))
+                self.assertEqual(n_out, len(self.engine.get_outlets(obj)))
+        self.assertEqual("VALID", self.engine.assess_connection("inlet~", 0, "outlet~", 0).status)
+        self.assertEqual("INVALID", self.engine.assess_connection("inlet~", 0, "outlet", 0).status)
+        self.assertEqual("VALID", self.engine.assess_connection("loadbang", 0, "metro", 0).status)
 
 
 if __name__ == "__main__":

@@ -253,7 +253,7 @@
     "lores~": {
       "inlets": {
         "0": { "name": "audio_in", "type": "signal" },
-        "1": { "name": "cutoff_freq_hz", "type": "float" },
+        "1": { "name": "cutoff_freq_hz", "type": "signal/float" },
         "2": { "name": "resonance_factor", "type": "float" }
       },
       "outlets": {
@@ -263,7 +263,7 @@
     "*~": {
       "inlets": {
         "0": { "name": "audio_in_a", "type": "signal" },
-        "1": { "name": "audio_in_b_or_gain", "type": "signal" }
+        "1": { "name": "audio_in_b_or_gain", "type": "signal/float" }
       },
       "outlets": {
         "0": { "name": "multiplied_audio", "type": "signal" }
@@ -272,7 +272,7 @@
     "+~": {
       "inlets": {
         "0": { "name": "audio_in_a", "type": "signal" },
-        "1": { "name": "audio_in_b_or_offset", "type": "signal" }
+        "1": { "name": "audio_in_b_or_offset", "type": "signal/float" }
       },
       "outlets": {
         "0": { "name": "summed_audio", "type": "signal" }
@@ -281,7 +281,7 @@
     "-~": {
       "inlets": {
         "0": { "name": "audio_in_a", "type": "signal" },
-        "1": { "name": "audio_in_b", "type": "signal" }
+        "1": { "name": "audio_in_b", "type": "signal/float" }
       },
       "outlets": {
         "0": { "name": "subtracted_audio", "type": "signal" }
@@ -289,7 +289,7 @@
     },
     "phasor~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "phase_reset", "type": "signal" }
       },
       "outlets": {
@@ -298,7 +298,7 @@
     },
     "saw~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "phase_offset", "type": "float" }
       },
       "outlets": {
@@ -307,7 +307,7 @@
     },
     "rect~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "duty_cycle", "type": "signal" }
       },
       "outlets": {
@@ -429,7 +429,7 @@
     },
     "tri~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "duty_cycle", "type": "signal" }
       },
       "outlets": {
@@ -624,6 +624,76 @@
       "inlets": [],
       "outlets": {
         "0": { "name": "received_message", "type": "anything", "aliases": ["output"] }
+      }
+    },
+    "inlet": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "control_from_parent", "type": "anything" }
+      }
+    },
+    "outlet": {
+      "inlets": {
+        "0": { "name": "control_to_parent", "type": "anything" }
+      },
+      "outlets": []
+    },
+    "inlet~": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "signal_from_parent", "type": "signal" }
+      }
+    },
+    "outlet~": {
+      "inlets": {
+        "0": { "name": "signal_to_parent", "type": "signal" }
+      },
+      "outlets": []
+    },
+    "loadbang": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "bang_on_load", "type": "bang" }
+      }
+    },
+    "midiout": {
+      "inlets": {
+        "0": { "name": "raw_midi_bytes", "type": "int" },
+        "1": { "name": "port_number", "type": "int" }
+      },
+      "outlets": []
+    },
+    "sprintf": {
+      "inlets": {
+        "0": { "name": "format_input_0", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "formatted_string", "type": "symbol" }
+      }
+    },
+    "udpreceive": {
+      "inlets": {
+        "0": { "name": "port_or_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "received_data", "type": "anything" },
+        "1": { "name": "sender_info", "type": "list" }
+      }
+    },
+    "udpsend": {
+      "inlets": {
+        "0": { "name": "data_to_send", "type": "anything" },
+        "1": { "name": "host_port", "type": "anything" }
+      },
+      "outlets": []
+    },
+    "jweb": {
+      "inlets": {
+        "0": { "name": "url_or_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "js_callback", "type": "anything" },
+        "1": { "name": "loaded_bang", "type": "bang" }
       }
     },
     "r": {
