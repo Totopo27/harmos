@@ -57,7 +57,8 @@ def compile_cpp_executable(
 
     inc_dirs = [Path(d).resolve() for d in (include_dirs or [])]
 
-    is_msvc = "cl" in Path(compiler).name.lower()
+    comp_stem = Path(compiler).stem.lower()
+    is_msvc = comp_stem == "cl" and "clang" not in Path(compiler).name.lower()
 
     if is_msvc:
         cmd = [compiler, "/std:c++17", "/EHsc", "/O2", f"/Fe:{str(out)}", str(src)]
