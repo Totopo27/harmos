@@ -19,7 +19,6 @@ from core.compiler.maxref_generator import write_maxref_file
 from core.compiler.oracle_harvest import (
     write_cases_jsonl,
     read_cases_jsonl,
-    harvest_from_callable
 )
 from core.compiler.oracle_diff import evaluate_diff
 from core.compiler.provenance import (
@@ -355,52 +354,6 @@ def compile_ir(
 
 
 # =============================================================================
-# Funciones de Referencia Deduplicadas
-# =============================================================================
-
-def wilson_reduce_to_octave(ratio: float) -> float:
-    """Reduce un intervalo a la octava [1.0, 2.0)."""
-    if ratio <= 0.0:
-        return 1.0
-    while ratio >= 2.0:
-        ratio /= 2.0
-    while ratio < 1.0:
-        ratio *= 2.0
-    return ratio
-
-
-def ref_hex_freq(col: int, row: int) -> float:
-    """Frecuencia de referencia para una celda hexagonal en 31-EDO."""
-    base_freq = 261.625565
-    edo = 31.0
-    step_x = 1
-    step_y = 5
-    step_count = col * step_x + row * step_y
-    return base_freq * (2.0 ** (step_count / edo))
-
-
-def ref_hex_hit(x: float, y: float) -> int:
-    """Hit-test de referencia para cuadrícula hexagonal Wilson."""
-    r = 12.0
-    cols = 39
-    rows = 25
-    sqrt3 = 1.732050807568877
-    h_spacing = r * 1.5
-    v_spacing = r * sqrt3
-    idx = 0
-    for row in range(rows):
-        for col in range(cols):
-            cx = col * h_spacing + r
-            cy = row * v_spacing + (v_spacing * 0.5 if col % 2 == 1 else 0.0) + (r * sqrt3 * 0.5)
-            dx = x - cx
-            dy = y - cy
-            if (dx * dx + dy * dy) <= (r * r * 0.85):
-                return idx
-            idx += 1
-    return -1
-
-
-# =============================================================================
 # Subcommand Dispatch Handlers
 # =============================================================================
 
@@ -447,27 +400,9 @@ def _dispatch_bench(args: argparse.Namespace) -> int:
 
 
 def _dispatch_harvest(args: argparse.Namespace) -> int:
-    cases = []
-    if args.suite == "truax":
-        from core.compiler.microtonal_engine import MicrotonalEngine
-        eng = MicrotonalEngine()
-        truax_inputs = [
-            [1.0, 1.0], [1.0, 2.0], [3.0, 2.0], [5.0, 3.0], [7.0, 4.0], [9.0, 5.0]
-        ]
-        cases.extend(harvest_from_callable(eng.to_normal_form, "to_normal_form", truax_inputs, tolerance=args.tolerance))
-        carrier_inputs = [
-            [220.0, 1.0, 1.0], [220.0, 3.0, 2.0], [440.0, 5.0, 3.0]
-        ]
-        cases.extend(harvest_from_callable(eng.calc_carrier_freq, "calc_carrier_freq", carrier_inputs, tolerance=args.tolerance))
-    elif args.suite == "wilson":
-        w_inputs = [[0.5], [1.0], [1.5], [2.0], [3.0], [5.0], [7.0]]
-        cases.extend(harvest_from_callable(wilson_reduce_to_octave, "reduce_to_octave", w_inputs, tolerance=args.tolerance))
-    elif args.suite == "hexslider":
-        freq_inputs = [[0, 0], [1, 0], [0, 1], [5, 2], [10, 4]]
-        cases.extend(harvest_from_callable(ref_hex_freq, "compute_cell_frequency", freq_inputs, tolerance=args.tolerance))
-        hit_inputs = [[12.0, 10.392], [0.0, 0.0], [30.0, 20.784], [500.0, 500.0]]
-        cases.extend(harvest_from_callable(ref_hex_hit, "hit_test", hit_inputs, tolerance=args.tolerance))
+    from benchmarks.suites import harvest_suite_cases
 
+    cases = harvest_suite_cases(args.suite, tolerance=args.tolerance)
     count = write_cases_jsonl(cases, args.out)
     print(f"Cosecha exitosa: {count} casos guardados en '{args.out}'.")
     return 0
@@ -484,19 +419,9 @@ def _dispatch_diff(args: argparse.Namespace) -> int:
             kernel_type_name=args.kernel_type_name
         )
     else:
-        registry = {}
-        if args.suite == "truax":
-            from core.compiler.microtonal_engine import MicrotonalEngine
-            eng = MicrotonalEngine()
-            registry["to_normal_form"] = eng.to_normal_form
-            registry["calc_carrier_freq"] = eng.calc_carrier_freq
-        elif args.suite == "wilson":
-            registry["reduce_to_octave"] = wilson_reduce_to_octave
-        elif args.suite == "hexslider":
-            registry["compute_cell_frequency"] = ref_hex_freq
-            registry["hit_test"] = ref_hex_hit
+        from benchmarks.suites import get_diff_registry
 
-        report = evaluate_diff(cases, registry)
+        report = evaluate_diff(cases, get_diff_registry(args.suite))
 
     print("\n" + "=" * 50)
     print(f" HARMOS ORACLE DIFF: {report.verdict} (SEMANTIC)")

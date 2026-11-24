@@ -130,7 +130,7 @@ class TestCppHeadlessRunner(unittest.TestCase):
         if not self.compiler:
             self.skipTest("Compilador C++ no disponible")
 
-        truax_header = Path("core/compiler/truax_kernel.hpp").resolve()
+        truax_header = Path("benchmarks/truax_fm/truax_kernel.hpp").resolve()
         self.assertTrue(truax_header.exists(), f"No se encontro {truax_header}")
 
         cases = [

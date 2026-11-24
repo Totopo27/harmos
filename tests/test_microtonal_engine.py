@@ -5,7 +5,7 @@ Valida la compensación matemática de Barry Truax y la generación de coll/buff
 import unittest
 import math
 from pathlib import Path
-from core.compiler.microtonal_engine import MicrotonalEngine
+from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
 
 
 class TestMicrotonalEngine(unittest.TestCase):

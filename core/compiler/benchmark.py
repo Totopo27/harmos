@@ -321,7 +321,7 @@ def format_benchmark_report(verdicts: List[BenchmarkVerdict]) -> str:
 
 def benchmark_truax_normal_form() -> BenchmarkVerdict:
     """Benchmark estandar: reduccion a forma normal de Truax (MicrotonalEngine)."""
-    from core.compiler.microtonal_engine import MicrotonalEngine
+    from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
 
     engine = MicrotonalEngine()
 
@@ -359,7 +359,7 @@ def benchmark_truax_normal_form() -> BenchmarkVerdict:
 
 def benchmark_scale_generation_384() -> BenchmarkVerdict:
     """Benchmark estandar: generacion de tablas de afinacion de 384 posiciones."""
-    from core.compiler.microtonal_engine import MicrotonalEngine
+    from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
 
     engine = MicrotonalEngine()
     return evaluate_benchmark(

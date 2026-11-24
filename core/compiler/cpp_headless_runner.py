@@ -77,7 +77,7 @@ def compile_cpp_executable(
         return False, f"Error al invocar compilador {compiler}: {e}"
 
 
-def _wrap_try_catch(expr_str: str, idx: int, out_type: str = "double", is_vector: bool = False) -> List[str]:
+def wrap_try_catch(expr_str: str, idx: int, out_type: str = "double", is_vector: bool = False) -> List[str]:
     """Genera un bloque try/catch en C++ que serializa el resultado o la excepción a JSON."""
     lines = [
         "    try {",
@@ -97,46 +97,7 @@ def _wrap_try_catch(expr_str: str, idx: int, out_type: str = "double", is_vector
     return lines
 
 
-def _generate_wilson_kernel(cases: List[TestCase], _type_name: Optional[str] = None) -> List[str]:
-    lines = []
-    for idx, c in enumerate(cases):
-        arg0 = c.args[0] if c.args else 1.0
-        expr = f"harmos::kernels::wilson::WilsonKernel::reduce_to_octave({float(arg0)})"
-        lines.extend(_wrap_try_catch(expr, idx, "double"))
-    return lines
-
-
-def _generate_hexslider_kernel(cases: List[TestCase], _type_name: Optional[str] = None) -> List[str]:
-    lines = ["    harmos::kernels::wilson::HexsliderKernel kernel;"]
-    for idx, c in enumerate(cases):
-        if c.fn == "hit_test":
-            arg0 = c.args[0] if len(c.args) > 0 else 0.0
-            arg1 = c.args[1] if len(c.args) > 1 else 0.0
-            expr = f"kernel.hit_test({float(arg0)}, {float(arg1)})"
-            lines.extend(_wrap_try_catch(expr, idx, "int"))
-        else:
-            arg0 = c.args[0] if len(c.args) > 0 else 0
-            arg1 = c.args[1] if len(c.args) > 1 else 0
-            expr = f"kernel.compute_cell_frequency({int(arg0)}, {int(arg1)})"
-            lines.extend(_wrap_try_catch(expr, idx, "double"))
-    return lines
-
-
-def _generate_truax_kernel(cases: List[TestCase], _type_name: Optional[str] = None) -> List[str]:
-    lines = []
-    for idx, c in enumerate(cases):
-        if c.fn == "to_normal_form":
-            arg0 = c.args[0] if len(c.args) > 0 else 1.0
-            arg1 = c.args[1] if len(c.args) > 1 else 1.0
-            expr = f"harmos::kernels::truax::TruaxKernel::to_normal_form({float(arg0)}, {float(arg1)})"
-            lines.extend(_wrap_try_catch(expr, idx, "auto", is_vector=True))
-        else:
-            arg0 = c.args[0] if len(c.args) > 0 else 220.0
-            arg1 = c.args[1] if len(c.args) > 1 else 1.0
-            arg2 = c.args[2] if len(c.args) > 2 else 1.0
-            expr = f"harmos::kernels::truax::TruaxKernel::calc_carrier_freq({float(arg0)}, {float(arg1)}, {float(arg2)})"
-            lines.extend(_wrap_try_catch(expr, idx, "double"))
-    return lines
+_wrap_try_catch = wrap_try_catch
 
 
 def _generate_dsp_kernel(cases: List[TestCase], kernel_type_name: Optional[str] = None) -> List[str]:
@@ -146,7 +107,7 @@ def _generate_dsp_kernel(cases: List[TestCase], kernel_type_name: Optional[str] 
         arg0 = c.args[0] if len(c.args) > 0 else 0.0
         arg1 = c.args[1] if len(c.args) > 1 else 1.0
         expr = f"kernel.process_sample({float(arg0)}f, {float(arg1)})"
-        lines.extend(_wrap_try_catch(expr, idx, "float"))
+        lines.extend(wrap_try_catch(expr, idx, "float"))
     return lines
 
 
@@ -156,13 +117,10 @@ def _generate_control_kernel(cases: List[TestCase], kernel_type_name: Optional[s
     for idx, c in enumerate(cases):
         arg0 = c.args[0] if c.args else 0.0
         expr = f"kernel.process_scalar({float(arg0)})"
-        lines.extend(_wrap_try_catch(expr, idx, "double"))
+        lines.extend(wrap_try_catch(expr, idx, "double"))
     return lines
 
 
-register_kernel_generator("wilson", _generate_wilson_kernel)
-register_kernel_generator("hexslider", _generate_hexslider_kernel)
-register_kernel_generator("truax", _generate_truax_kernel)
 register_kernel_generator("dsp", _generate_dsp_kernel)
 register_kernel_generator("control", _generate_control_kernel)
 
@@ -195,6 +153,13 @@ def generate_cpp_harness(
         "    std::cout << std::setprecision(17);",
         ""
     ]
+
+    if kernel_class not in _KERNEL_GENERATORS:
+        try:
+            from benchmarks.suites import register_pilot_kernels
+            register_pilot_kernels()
+        except ImportError:
+            pass
 
     generator = _KERNEL_GENERATORS.get(kernel_class, _KERNEL_GENERATORS["control"])
     lines.extend(generator(cases, kernel_type_name))

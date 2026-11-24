@@ -44,7 +44,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Run Static Code Quality (Ruff)
-        run: ruff check core/ scripts/ tests/
+        run: ruff check core/ scripts/ benchmarks/ tests/
 
       - name: Run Harmos Guardrail (Tests + Schemas + Privacy)
         run: python scripts/check.py

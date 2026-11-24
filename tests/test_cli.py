@@ -262,7 +262,7 @@ class TestHarmosCLI(unittest.TestCase):
 
     def test_cli_harvest_and_diff_truax_cpp_headless(self):
         cases_file = os.path.join(self.temp_dir, "cases_truax.jsonl")
-        truax_kernel = os.path.join("core", "compiler", "truax_kernel.hpp")
+        truax_kernel = os.path.join("benchmarks", "truax_fm", "truax_kernel.hpp")
 
         import subprocess
         import sys
