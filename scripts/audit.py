@@ -334,47 +334,39 @@ def resolve_max_log_path(max_exe: Optional[Path] = None) -> Optional[Path]:
     Localiza el archivo Max.log dentro de la carpeta de usuario de Max.
 
     En Max 9 la ruta canonica es <APPDATA>/Cycling '74/Max 9/Logs/Max.log (Windows)
-    o ~/Library/Logs/Cycling '74/Max 9/Max.log (macOS).
+    o ~/Library/Logs/Cycling '74/Max 9/Max.log (macOS). Si max_exe revela la version
+    ("Max 9"), se prefiere el log de esa version en ambas plataformas.
     """
+    wants = None
+    if max_exe:
+        version = re.search(r"\bmax (\d+)\b", str(max_exe).lower())
+        if version:
+            wants = f"max {version.group(1)}"
+
+    candidates: List[Path] = []
     if sys.platform == "darwin":
         mac_bases = [
             Path.home() / "Library" / "Logs" / "Cycling '74",
             Path.home() / "Library" / "Application Support" / "Cycling '74",
         ]
-        candidates = []
         for base in mac_bases:
             if base.exists():
                 candidates.extend(p for p in base.glob("*/Logs/Max.log") if p.is_file())
                 candidates.extend(p for p in base.glob("*/Max.log") if p.is_file())
-        if candidates:
-            return sorted(candidates, key=lambda p: str(p).lower())[0]
 
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        return None
+    if not candidates:
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) / "Cycling '74" if appdata else None
+        if base is not None and base.exists():
+            candidates.extend(p for p in base.glob("*/Logs/Max.log") if p.is_file())
 
-    base = Path(appdata) / "Cycling '74"
-    if not base.exists():
-        return None
-
-    wants = None
-    if max_exe:
-        exe_str = str(max_exe).lower()
-        if "max 9" in exe_str:
-            wants = "max 9"
-        elif "max 8" in exe_str:
-            wants = "max 8"
-
-    candidates = sorted(
-        (p for p in base.glob("*/Logs/Max.log") if p.is_file()),
-        key=lambda p: str(p).lower(),
-    )
+    candidates = sorted(set(candidates), key=lambda p: str(p).lower())
     if not candidates:
         return None
 
     if wants:
         for candidate in candidates:
-            if wants in str(candidate.parent.parent).lower():
+            if wants in (part.lower() for part in candidate.parts):
                 return candidate
 
     return candidates[0]

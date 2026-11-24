@@ -32,3 +32,5 @@ cases_*.jsonl
 # Python artifacts
 __pycache__/
 *.py[cod]
+.ruff_cache/
+.coverage

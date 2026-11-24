@@ -1,0 +1,33 @@
+[project]
+name = "harmos"
+version = "0.1.0"
+description = "Agnostic meta-compiler framework for Cycling '74 Max MSP packages."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+# Install with: python -m pip install --group dev  (pip >= 25.1)
+dev = [
+    "ruff==0.17.6",
+    "coverage==7.17.5",
+]
+
+[tool.ruff]
+target-version = "py311"
+src = ["core", "scripts", "tests"]
+extend-exclude = ["c74support", "build", "build_e2e", "build_harmos"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501", "F401", "F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# CLI scripts must insert the repo root into sys.path before importing core.
+"scripts/*.py" = ["E402"]
+
+[tool.coverage.run]
+source = ["core", "scripts"]
+
+[tool.coverage.report]
+show_missing = false

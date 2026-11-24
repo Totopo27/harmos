@@ -51,6 +51,43 @@ class LogFixtureMixin:
         return path
 
 
+class TestResolveMaxLogPath(unittest.TestCase):
+    def _make_logs(self, base, *layouts):
+        created = {}
+        for version, relative in layouts:
+            log = base.joinpath("Cycling '74", version, *relative)
+            log.parent.mkdir(parents=True, exist_ok=True)
+            log.write_text("", encoding="utf-8")
+            created[version] = log
+        return created
+
+    def test_macos_prefers_version_of_max_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            logs = self._make_logs(home / "Library" / "Logs", ("Max 8", ["Max.log"]), ("Max 9", ["Max.log"]))
+            with mock.patch.object(audit.sys, "platform", "darwin"), \
+                    mock.patch.object(audit.Path, "home", return_value=home):
+                self.assertEqual(logs["Max 9"], audit.resolve_max_log_path(Path("/Applications/Max 9.app")))
+                self.assertEqual(logs["Max 8"], audit.resolve_max_log_path(Path("/Applications/Max 8.app")))
+                # Without a version hint the deterministic first candidate is kept.
+                self.assertEqual(logs["Max 8"], audit.resolve_max_log_path(None))
+
+    def test_windows_prefers_version_of_max_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            appdata = Path(tmp)
+            logs = self._make_logs(appdata, ("Max 8", ["Logs", "Max.log"]), ("Max 9", ["Logs", "Max.log"]))
+            exe = Path("Program Files") / "Cycling '74" / "Max 9" / "Max.exe"
+            with mock.patch.object(audit.sys, "platform", "win32"), \
+                    mock.patch.dict(audit.os.environ, {"APPDATA": str(appdata)}):
+                self.assertEqual(logs["Max 9"], audit.resolve_max_log_path(exe))
+
+    def test_returns_none_without_any_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(audit.sys, "platform", "win32"), \
+                    mock.patch.dict(audit.os.environ, {"APPDATA": tmp}):
+                self.assertIsNone(audit.resolve_max_log_path(None))
+
+
 class TestLogParsing(LogFixtureMixin, unittest.TestCase):
     def test_parse_log_line_extracts_level_and_message(self):
         parsed = parse_log_line(_line("error", "harmos_x~: No such object"))

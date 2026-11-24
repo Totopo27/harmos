@@ -27,13 +27,25 @@ FORBIDDEN_PATTERNS = [
     (r"/Users/[a-zA-Z0-9_-]+/", "Ruta absoluta de usuario macOS"),
     (r"ghp_[a-zA-Z0-9]{20,}", "GitHub Personal Access Token"),
     (r"gho_[a-zA-Z0-9]{20,}", "GitHub OAuth Token"),
+    (r"github_pat_[A-Za-z0-9_]{22,}", "GitHub Fine-Grained Personal Access Token"),
+    (r"AKIA[0-9A-Z]{16}", "AWS Access Key ID"),
+    (r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----", "Clave privada PEM"),
 ]
 
 # Extensiones prohibidas de scripts de host en el repo canonico
 BANNED_EXTENSIONS = [".ps1", ".bat", ".cmd"]
 
 # Extensiones de texto analizadas contra fugas y PII
-SCANNED_EXTENSIONS = [".md", ".py", ".json", ".cpp", ".hpp", ".txt", ".cmake", ".yml", ".yaml"]
+SCANNED_EXTENSIONS = [
+    ".md", ".py", ".json", ".cpp", ".hpp", ".txt", ".cmake", ".yml", ".yaml",
+    ".toml", ".env", ".sh", ".xml",
+]
+
+
+def _is_scanned_text(path_obj: Path) -> bool:
+    # Dotfiles such as ".env" or ".env.local" have an empty suffix in pathlib.
+    name = path_obj.name.lower()
+    return path_obj.suffix.lower() in SCANNED_EXTENSIONS or name == ".env" or name.startswith(".env.")
 
 
 def run_unit_tests() -> bool:
@@ -84,19 +96,24 @@ def validate_json_schemas(schema_dir: Path = None) -> bool:
     return all_valid and catalog_seen
 
 
-def scan_for_leaks_and_pii() -> bool:
+def scan_for_leaks_and_pii(repo_root: Path = None) -> bool:
     print("[3/3] Escaneando arbol git en busca de PII, rutas de host o secretos...")
-    
-    result = subprocess.run(["git", "ls-files"], cwd=_REPO_ROOT, capture_output=True, text=True)
+    root = repo_root or _REPO_ROOT
+
+    # Tracked plus untracked-but-not-ignored files: a leak must be caught before `git add`.
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=root, capture_output=True, text=True,
+    )
     if result.returncode != 0:
         print("  FAIL: No se pudo ejecutar git ls-files. Escaneo de privacidad falló de forma estricta (fail-closed).")
         return False
 
-    files = result.stdout.strip().splitlines()
+    files = sorted(set(result.stdout.strip().splitlines()))
     has_leaks = False
 
     for file_path in files:
-        path_obj = _REPO_ROOT / file_path
+        path_obj = root / file_path
 
         # 1. Chequeo de extension prohibida
         if path_obj.suffix.lower() in BANNED_EXTENSIONS:
@@ -104,7 +121,7 @@ def scan_for_leaks_and_pii() -> bool:
             has_leaks = True
 
         # 2. Chequeo de contenido en archivos de texto
-        if path_obj.suffix.lower() in SCANNED_EXTENSIONS and path_obj.is_file():
+        if _is_scanned_text(path_obj) and path_obj.is_file():
             try:
                 with open(path_obj, "r", encoding="utf-8", errors="ignore") as f:
                     for line_num, line in enumerate(f, start=1):
