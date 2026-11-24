@@ -230,6 +230,25 @@ class TestContractEngine(unittest.TestCase):
         self.assertEqual(voice_overlay.resolve_inlet_index("poly~ myVoice 8", "mod_depth"), 2)
         self.assertEqual(voice_overlay.resolve_outlet_index("poly~ myVoice 8", "env_done"), 2)
 
+    def test_poly_default_and_dynamic_boundary_cases(self):
+        self.assertEqual(self.engine.assess_connection("cycle~", 0, "poly~ fmVoice 16", 0).status, "INVALID")
+        self.assertEqual(self.engine.assess_connection("notein", 0, "poly~ fmVoice 16", 1).status, "INVALID")
+        self.assertEqual(len(self.engine.get_inlets("poly~ @inlets 3 @outlets 1")), 3)
+        self.assertEqual(len(self.engine.get_inlets("poly~ v 8 @inlets 0 @outlets 0")), 1)
+        self.assertEqual(len(self.engine.get_outlets("poly~ v 8 @inlets 0 @outlets 0")), 0)
+        self.assertEqual(
+            self.engine.assess_connection("poly~ v 8 @inlets 0 @outlets 0", 0, "gain~", 0).status,
+            "INVALID",
+        )
+        ov = ContractEngine.from_ir(
+            {
+                "object_name": "voiceA",
+                "inlets": [{"id": 0, "name": "gate", "type": "int"}],
+                "outlets": [{"id": 0, "name": "out", "type": "signal"}],
+            }
+        )
+        self.assertEqual(ov.assess_connection("cycle~", 0, "poly~ voiceA 4", 0).status, "INVALID")
+
 
 if __name__ == "__main__":
     unittest.main()

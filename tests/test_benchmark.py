@@ -183,6 +183,21 @@ class TestBenchmarkEngine(unittest.TestCase):
         )
         self.assertEqual(order, ["target", "ref", "ref", "target", "target", "ref", "ref", "target"])
 
+        odd_order = []
+        evaluate_benchmark(
+            name="Odd Order Alternation",
+            target_fn=lambda: odd_order.append("target"),
+            reference_fn=lambda: odd_order.append("ref"),
+            budget=budget,
+            iterations=5,
+            rounds=2,
+            warmup=0,
+        )
+        self.assertEqual(
+            odd_order,
+            ["target", "ref", "ref", "target", "target", "ref", "ref", "target", "target", "ref"] * 2,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

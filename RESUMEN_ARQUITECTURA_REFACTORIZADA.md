@@ -1,8 +1,10 @@
 # Reporte de Arquitectura y Refactorización del Proyecto: Meta-Traductor para Max MSP
 
+> **Nota Histórica**: Este documento registra el hito fundacional inicial cuando el proyecto operaba bajo el nombre de trabajo **OptimizandoParaMaxSDK**. El framework evolucionó posteriormente hacia **Harmos** (`README.md`, `ARQUITECTURA_TRADUCTOR_MAX.md` y `docs/adr/0001`–`0015`).
+
 ## Resumen Ejecutivo
 
-Se completó la estructuración conceptual y arquitectónica de **OptimizandoParaMaxSDK**, transformando la idea de un "script de conversión" en un **Meta-Framework Generador de Ecosistemas y Objetos para Max MSP**.
+Se completó la estructuración conceptual y arquitectónica inicial de **Harmos** (entonces **OptimizandoParaMaxSDK**), transformando la idea de un "script de conversión" en un **Meta-Framework Generador de Ecosistemas y Objetos para Max MSP**.
 
 El sistema está diseñado bajo los principios de **Project Architect**, **Receipt-Driven Development (RDD)** y el paradigma idiomático de Max MSP:
 1. **Descomposición Atómica**: Nunca forzar un proyecto completo en un único objeto monolítico; se desmenuza en objetos de responsabilidad única.
@@ -15,11 +17,11 @@ El sistema está diseñado bajo los principios de **Project Architect**, **Recei
 ## Estructura Generada y Validada
 
 ```text
-OptimizandoParaMaxSDK/
+harmos/ (históricamente OptimizandoParaMaxSDK/)
 ├── ARQUITECTURA_TRADUCTOR_MAX.md     <-- Documento maestro con flujos y capas
 ├── FLUJO_DE_TRABAJO.md               <-- Plan de 7 fases con compuertas binarias (Gates)
 ├── catalog/
-│   ├── max_primitives.json           <-- Catálogo de más de 40 primitivas estándar de Max
+│   ├── max_primitives.json           <-- Archivo histórico legado (reemplazado por core/schema/max_contracts.json)
 │   └── archetypes/
 │       └── kslider.md                <-- Modelo de contrato y adaptación de teclado
 ├── core/

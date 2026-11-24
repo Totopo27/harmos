@@ -18,7 +18,8 @@ Cargar al generar programáticamente parches de Max MSP (`.maxpat`) o dispositiv
 - **Desempaquetar Retorno de `place()`**: `patch.place()` SIEMPRE retorna una lista; indexar con `[0]` al asignar variables individuales (ej. `osc = patch.place("cycle~ 440")[0]`).
 - **Nombres Case-Sensitive de Max**: Usar nombres exactos de la nomenclatura de Max (`cycle~`, `lores~`, `live.dial`).
 - **Control de Posición Previo**: Invocar `patch.set_position(x, y)` antes de cada llamada a `place()` para prevenir superposición de cajas.
-- **Indexación Cero de Conexiones**: Inlets y outlets se indexan en base 0 (`obj.ins[0]`, `obj.outs[0]`).
+- **Indexación Cero de Conexiones (solo scripts MaxPyLang standalone)**: Inlets y outlets se indexan en base 0 (`obj.ins[0]`, `obj.outs[0]`) únicamente en scripts externos de MaxPyLang.
+- **Regla Harmos de Cero Hardcoding en `core/`**: Todo código interno del compilador Harmos (`core/compiler/`) DEBE usar `TypedPatch.connect_semantic()` y resolver puertos dinámicamente contra `core/schema/max_contracts.json` mediante `ContractEngine`; está prohibido hardcodear índices numéricos de inlet/outlet en `core/`.
 - **Limitador de Seguridad en M4L**: Insertar obligatoriamente `clip~ -1. 1.` antes de alimentar `plugout~`.
 - **Salida Estéreo Completa**: Conectar siempre ambos canales de audio a `plugout~` (`ins[0]` e `ins[1]`).
 

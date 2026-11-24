@@ -45,3 +45,4 @@ refactorización arquitectónica, contratos estrictos, calidad de tests y docume
 
 - L1: "ve una por una resolviendo absolutamente todas las fases con los puntos de mejora que encontraste" — Autorización completa para abordar las 5 fases sistemáticamente.
 - L2: Completadas las 5 fases de optimización (T1: c4e8281, T2: 000ecae, T3: 66ca9b6, T4: 75b1ba0, T5: 6e8d713). 183 tests pasando al 100%, guardrails blindados, ADRs sincronizados y arquitectura formalizada. Feature cerrada con éxito.
+- L3: Reconciliación post-auditoría (`harmos-audit-report.md` / `audit-v2-wave2.md`): `S15` quedó resuelto con Ruff obligado sin `mypy` sin uso en `audit-v2-fixes` (PR #16, `7e7fc73`), y las brechas remanentes de `S3` (`poly~` dinámico) y `S19` (extracción de dominio ADR-0001 de `microtonal_engine.py`, `truax_kernel.hpp` y suites piloto fuera de `core/`) se completaron en `audit-v2-wave2`.

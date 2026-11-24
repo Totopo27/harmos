@@ -314,26 +314,28 @@ Técnicas de ingeniería que potencian el desarrollo en Max SDK:
 
 ---
 
-## 8. Estructura del Repositorio y Hoja de Ruta
+## 8. Estructura del Repositorio
 
-Estructura de trabajo en Harmos:
+Estructura vigente verificada en Harmos:
 
 ```text
 harmos/
-├── GUIA_MAX_SDK_PASO_A_PASO.md       <-- Guía maestra de compilación C/C++, DSP y Visual Studio
-├── HERRAMIENTAS_Y_SKILLS_MAX.md     <-- Este catálogo maestro de herramientas, MCPs, IA y DSP
-├── ROADMAP_MEJORAS_MAX_MCP.md       <-- Plan de auditoría y PRs quirúrgicos para servidores MCP
-├── skills/                           <-- Habilidades locales para agentes de IA
-│   ├── maxpylang/                    <-- Generación programática de parches .maxpat y .amxd
-│   ├── ersatzben-maxmsp-mcp/         <-- Reglas críticas de parcheo y tipos numéricos
-│   ├── patch-guidelines/             <-- Nomenclatura, layout y scripting JS
-│   ├── organize-patch/               <-- Algoritmos de ordenamiento visual
-│   ├── max-techniques/               <-- poly~, bpatcher, pattrstorage
-│   ├── m4l-techniques/               <-- Live Object Model para Ableton
-│   ├── genexpr-dsp/                  <-- Sintaxis y optimización para gen~ [Pendiente]
-│   ├── py2max-generator/             <-- Generación programática de parches con Python [Pendiente]
-│   └── max-sdk-neural-audio/         <-- Inferencia LibTorch/RTNeural en C++ [Pendiente]
-└── templates/                        <-- Plantillas CMake y esqueletos de externals C++
+├── AGENTS.md                         <-- Reglas duras para agentes de código
+├── CONTRIBUTING.md                   <-- Flujo ODD, invariantes y checklist pre-commit
+├── GLOSSARY.md                       <-- Terminología canónica del compilador y oráculo
+├── GUIA_MAX_SDK_PASO_A_PASO.md       <-- Guía de compilación C/C++, Min-DevKit y Visual Studio
+├── HERRAMIENTAS_Y_SKILLS_MAX.md      <-- Este catálogo de referencia del ecosistema Max
+├── ROADMAP_MEJORAS_MAX_MCP.md        <-- Plan de mejoras para servidores MCP
+├── core/                             <-- Motor agnóstico: compiler/ y schema/max_contracts.json
+├── benchmarks/                       <-- Suites piloto (teclados-wilson, midiControl, truax_fm, etc.)
+├── docs/                             <-- ADRs (docs/adr/), guías de agentes y ORACULO_LIMITES.md
+├── meta-skills/                      <-- Meta-skills: max-transpiler-scout, max-runtime-gatekeeper
+├── odd/                              <-- Seguimiento ODD (odd/tasks/)
+├── scripts/                          <-- Guardrail check.py, verifier audit.py y bench.py
+├── skills/                           <-- Skills locales: ersatzben-maxmsp-mcp, evidence-investigation,
+│                                         maxpylang, tet-inversion-geometry-expert, wilson-tuning-auditor
+├── templates/                        <-- Plantillas maxpylang, min_object_control/dsp y node_script_wrapper
+└── tests/                            <-- Suite unitaria, contratos, oráculos y paridad E2E
 ```
 
 ---

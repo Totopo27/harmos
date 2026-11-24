@@ -47,7 +47,7 @@ Run these checks from the repository root before every commit or PR:
 python scripts/check.py
 
 # 2. Static lint check (matches CI config in pyproject.toml)
-ruff check core/ scripts/ tests/
+ruff check core/ scripts/ benchmarks/ tests/
 
 # 3. Performance budget check (host Python simulation: SHIP / NO_SHIP)
 python scripts/bench.py
