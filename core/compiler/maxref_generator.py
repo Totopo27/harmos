@@ -11,7 +11,7 @@ def escape_xml(text: Any) -> str:
     """Escapa caracteres especiales para inclusión segura en XML."""
     if text is None:
         return ""
-    return saxutils.escape(str(text))
+    return saxutils.escape(str(text), {"'": "&apos;", '"': "&quot;"})
 
 
 def map_ir_attr_type_to_c74(attr_type: str) -> str:

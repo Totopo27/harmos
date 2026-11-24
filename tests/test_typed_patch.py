@@ -272,6 +272,13 @@ class TestTypedPatch(unittest.TestCase):
         self.assertEqual(box_dict["items"], items)
         self.assertEqual(box_dict["maxclass"], "umenu")
 
+    def test_connect_semantic_annotations_resolve(self):
+        # Forces evaluation of lazy annotations (PEP 649) so a missing typing import fails here.
+        import inspect
+        hints = inspect.get_annotations(TypedPatch.connect_semantic, eval_str=True)
+        self.assertIn("src_outlet", hints)
+        self.assertIn("semantic_role", hints)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@
 Harmos Contract Engine: Introspección y validación estricta de contratos Max MSP.
 Consume core/schema/max_contracts.json.
 """
+import hashlib
 import json
 from pathlib import Path
 from typing import Dict, Any, List, NamedTuple, Optional, Tuple, Union
@@ -61,7 +62,7 @@ def validate_contracts(data: Any) -> None:
 
 
 class ContractEngine:
-    _RAW_CONTRACTS_CACHE: Dict[Tuple[str, float], Dict[str, Any]] = {}
+    _RAW_CONTRACTS_CACHE: Dict[Tuple[str, bytes], Dict[str, Any]] = {}
 
     def __init__(
         self, contracts_path: Optional[str] = None,
@@ -102,13 +103,12 @@ class ContractEngine:
 
     def _load_contracts(self) -> None:
         path_obj = self.contracts_path.resolve()
-        mtime = path_obj.stat().st_mtime_ns if path_obj.exists() else 0
-        cache_key = (str(path_obj), mtime)
+        raw_bytes = self.contracts_path.read_bytes()
+        cache_key = (str(path_obj), hashlib.sha256(raw_bytes).digest())
         if cache_key in self._RAW_CONTRACTS_CACHE:
             data = self._RAW_CONTRACTS_CACHE[cache_key]
         else:
-            with open(self.contracts_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = json.loads(raw_bytes.decode("utf-8"))
             validate_contracts(data)
             self._RAW_CONTRACTS_CACHE[cache_key] = data
 

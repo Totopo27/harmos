@@ -104,6 +104,67 @@ class TestCppGenerator(unittest.TestCase):
         self.assertIn("reduce_to_octave", content)
         self.assertIn("get_combinations", content)
 
+    def test_dsp_sample_operator_arity_and_signature_match_signal_ports(self):
+        # 1-in (compound signal/float) / 1-out (signal)
+        ir_1_1 = {
+            "object_name": "dsp.mono_osc",
+            "category": "dsp",
+            "target_runtime": "cpp_min_devkit",
+            "inlets": [{"id": 0, "type": "signal/float", "description": "freq"}],
+            "outlets": [{"id": 0, "type": "signal", "description": "out"}],
+            "attributes": [],
+        }
+        w_1_1 = generate_min_wrapper(ir_1_1, "mono_osc_kernel.hpp")
+        self.assertIn("public sample_operator<1, 1>", w_1_1)
+        self.assertIn("sample operator()(sample in)", w_1_1)
+
+        # 2-in (signal, signal/float) / 2-out (signal, signal)
+        ir_2_2 = {
+            "object_name": "dsp.stereo_fx",
+            "category": "dsp",
+            "target_runtime": "cpp_min_devkit",
+            "inlets": [
+                {"id": 0, "type": "signal", "description": "left"},
+                {"id": 1, "type": "signal/float", "description": "right"},
+            ],
+            "outlets": [
+                {"id": 0, "type": "signal", "description": "left_out"},
+                {"id": 1, "type": "signal", "description": "right_out"},
+            ],
+            "attributes": [],
+        }
+        w_2_2 = generate_min_wrapper(ir_2_2, "stereo_fx_kernel.hpp")
+        self.assertIn("public sample_operator<2, 2>", w_2_2)
+        self.assertIn("samples<2> operator()(sample in_0, sample in_1)", w_2_2)
+
+        # 2-in / 1-out
+        ir_2_1 = {
+            "object_name": "dsp.ring_mod",
+            "category": "dsp",
+            "target_runtime": "cpp_min_devkit",
+            "inlets": [
+                {"id": 0, "type": "signal", "description": "a"},
+                {"id": 1, "type": "signal", "description": "b"},
+            ],
+            "outlets": [{"id": 0, "type": "signal", "description": "out"}],
+            "attributes": [],
+        }
+        w_2_1 = generate_min_wrapper(ir_2_1, "ring_mod_kernel.hpp")
+        self.assertIn("public sample_operator<2, 1>", w_2_1)
+        self.assertIn("sample operator()(sample in_0, sample in_1)", w_2_1)
+
+        # Control object sending to first declared outlet id
+        ir_ctrl = {
+            "object_name": "ctrl.offset_out",
+            "category": "control",
+            "target_runtime": "cpp_min_devkit",
+            "inlets": [{"id": 0, "type": "float", "description": "in"}],
+            "outlets": [{"id": 2, "type": "float", "description": "out"}],
+            "attributes": [],
+        }
+        w_ctrl = generate_min_wrapper(ir_ctrl, "offset_out_kernel.hpp")
+        self.assertIn("out_2.send(res);", w_ctrl)
+
 
 def _find_cpp_compiler():
     """Localiza un compilador C++ del host. Sin compilador no se certifica nada."""
@@ -187,6 +248,30 @@ class TestCppIdentifierSafety(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("cut-off", message)
         self.assertIn("cut_off", message)
+
+    def test_symbol_string_and_bool_attributes_compile_and_map_min_types(self):
+        ir = self._base_ir([
+            {"name": "waveform", "type": "symbol", "default": "sine"},
+            {"name": "label", "type": "string", "default": ""},
+            {"name": "bypass", "type": "bool", "default": True},
+            {"name": "invert", "type": "bool", "default": False},
+        ])
+        kernel_src = generate_cpp_kernel(ir)
+        self.assertIn("#include <string>", kernel_src)
+        self.assertIn('std::string waveform{"sine"};', kernel_src)
+        self.assertIn('std::string label{""};', kernel_src)
+        self.assertIn("bool bypass{true};", kernel_src)
+        self.assertIn("bool invert{false};", kernel_src)
+        self._assert_kernel_compiles(kernel_src, "ident_probe")
+
+        wrapper = generate_min_wrapper(ir, "ident_probe_kernel.hpp")
+        self.assertNotIn("attribute<string>", wrapper)
+        self.assertIn('attribute<symbol> waveform { this, "waveform", "sine",', wrapper)
+        self.assertIn('attribute<symbol> label { this, "label", "",', wrapper)
+        self.assertIn('attribute<bool> bypass { this, "bypass", true,', wrapper)
+        self.assertIn('attribute<bool> invert { this, "invert", false,', wrapper)
+        self.assertNotIn("True", wrapper)
+        self.assertNotIn("False", wrapper)
 
 
 if __name__ == "__main__":
