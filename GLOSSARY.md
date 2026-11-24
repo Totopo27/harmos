@@ -67,6 +67,15 @@ Conjunto canónico y exhaustivo de estados binarios de evaluación:
 - **`INVALID`**: Registro o archivo malformado que no cumple la estructura mínima esperada.
 - **`FAIL`**: Discrepancia numérica, excepción no controlada o error de compilación.
 
+### Evaluación Tri-Estado de Contratos (Tri-State Assessment)
+Mecanismo estricto de validación implementado en `ContractEngine.assess_connection()` (`core/compiler/contract_engine.py`, ADR-0010) que evalúa cada conexión candidata devolviendo un `ConnectionAssessment` con uno de tres estados explícitos: **`VALID`** (puertos presentes y compatibles según la matriz señal/control), **`INVALID`** (violación contractual detectable estáticamente, p. ej. señal hacia inlet exclusivamente de control, conexión hacia `comment` o índice fuera de rango) y **`UNVERIFIABLE`** (contrato ausente para alguno de los objetos). Un objeto sin contrato nunca se aprueba en silencio (`is_valid_connection()` solo devuelve `True` para `VALID`, y `validate_connection()` rechaza `INVALID` y `UNVERIFIABLE` salvo `allow_unverifiable=True`).
+
+### Aridad Dinámica (Dynamic Arity)
+Síntesis en tiempo de compilación del esquema de inlets y outlets mediante `ContractEngine._synthesize_dynamic_contract()` para objetos nativos de Max cuya topología de puertos depende de sus argumentos de instanciación (`unpack`, `pack`, `trigger` / `t`, `route`). Evita el hardcoding de índices al derivar tipos, roles semánticos y número exacto de puertos directamente desde los argumentos declarados en la caja.
+
+### Veredictos de Presupuesto de Rendimiento (SHIP / NO_SHIP)
+Veredicto categórico emitido por `core/compiler/benchmark.py` (`scripts/bench.py` y `python -m core.compiler.cli bench`) tras evaluar las latencias medidas en el intérprete Python host contra un `PerformanceBudget` (`max_latency_us`, `max_p95_latency_us`, `min_speedup` con `tolerance_margin`). **`SHIP`** indica cumplimiento estricto de todos los umbrales configurados; **`NO_SHIP`** indica exceso de latencia, regresión de aceleración o ausencia de muestras de referencia/medición. Conforme a [`docs/ORACULO_LIMITES.md`](./docs/ORACULO_LIMITES.md), `SHIP` mide rendimiento en Python host y **nunca sustituye** al veredicto `PASS` de una auditoría en vivo en Cycling '74 Max (`scripts/audit.py`).
+
 ### Meta-Skills del Pipeline
 Habilidades operativas especializadas que gobiernan el ciclo de vida de la traducción:
 - **`max-transpiler-scout`**: Inspecciona el código externo, audita algoritmos y emite la IR inicial consultando el catálogo canónico.

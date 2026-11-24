@@ -44,22 +44,65 @@ Ninguna compilación se valida en frío. El motor levanta instancias controladas
 ## Flujo del pipeline
 
 ```
-Código fuente externo (C++, Python, JS, Rust)
+Código fuente externo (C++, Python, JS/TS, SuperCollider)
                │
                ▼
-[ 1. max-project-scout ] ──► Audita dependencias, modelos matemáticos y arquitectura
-               │
+[ 1. max-transpiler-scout / extract ] ──► Auditoría estática y extracción de IR (.ir.json)
+               │                          consultando catalog/ y max_contracts.json
                ▼
-[ 2. max-skill-factory ] ──► Genera skills LLM-first ad-hoc para el dominio
-               │
+[ 2. core.compiler.cli compile ]      ──► Validación tri-estado (ContractEngine, TypedPatch)
+               │                          y síntesis de kernel puro (*_kernel.hpp), wrapper Min (*.cpp),
+               │                          CMakeLists.txt, .maxpat, .maxref.xml y emitted-from.json
                ▼
-[ 3. max-catalog-matcher ] ──► Resuelve: Primitiva nativa vs. External C++ nuevo
-               │
+[ 3. Oráculo semántico headless ]     ──► Verificación diferencial C++ (harvest / diff) sobre
+               │                          cases.jsonl sin requerir runtime propietario
                ▼
-[ 4. Generación IR / C++ ] ──► Genera fuentes Min-Devkit, CMakeLists y patchers
-               │
-               ▼
-[ 5. max-live-verifier ] ──► Levanta Max.exe y audita Max.log (0 errores de consola)
+[ 4. max-runtime-gatekeeper / audit ] ──► Compuertas procedencia → contratos → runtime en vivo
+                                          sobre Max.exe / Max (Max.log, 0 errores)
+```
+
+---
+
+## Uso del CLI y scripts canónicos
+
+Todos los subcomandos del compilador se ejecutan vía `python -m core.compiler.cli`:
+
+```bash
+# 1. Compilar una IR a paquete Max completo (modo por defecto o explícito con "compile")
+python -m core.compiler.cli benchmarks/midiControl/micro_mpe_ir.json --out build_e2e/micro_mpe_pkg --no-build
+python -m core.compiler.cli compile <archivo.ir.json> --out ./build_harmos --source <src>
+
+# 2. Extraer una especificación IR desde TypeScript o JavaScript
+python -m core.compiler.cli extract <fuente.ts> --out <salida.ir.json> --name <harmos.objeto>
+
+# 3. Generar documentación canónica .maxref.xml desde una IR
+python -m core.compiler.cli doc <archivo.ir.json> --out docs/ --author "Harmos Meta-Compiler"
+
+# 4. Verificar la huella criptográfica de procedencia (emitted-from.json)
+python -m core.compiler.cli verify-provenance <dir_paquete> --ir <archivo.ir.json> --source <src>
+
+# 5. Cosechar vectores de prueba semánticos hacia cases.jsonl
+python -m core.compiler.cli harvest --suite wilson --out cases_wilson.jsonl --tolerance 1e-7
+
+# 6. Ejecutar oráculo diferencial semántico (Python o kernel C++ headless)
+python -m core.compiler.cli diff cases_wilson.jsonl --suite wilson
+python -m core.compiler.cli diff cases_wilson.jsonl --cpp-kernel benchmarks/teclados-wilson/wilson_kernel.hpp --kernel-class wilson
+
+# 7. Evaluar presupuestos de rendimiento en Python host (SHIP / NO_SHIP)
+python -m core.compiler.cli bench --suite all
+```
+
+Scripts canónicos de verificación:
+
+```bash
+# Guardrail pre-commit completo (tests unitarios + contratos + escaneo de privacidad)
+python scripts/check.py
+
+# Auditoría estructural y en vivo en Cycling '74 Max (procedencia → contratos → runtime)
+python scripts/audit.py --patcher <ruta/al/parche.maxpat> --ir <archivo.ir.json>
+
+# Benchmark de presupuestos de rendimiento en JSON
+python scripts/bench.py --suite all --json
 ```
 
 ---
@@ -69,28 +112,39 @@ Código fuente externo (C++, Python, JS, Rust)
 ```
 harmos/
 ├── core/
-│   ├── compiler/            # Pipeline determinista: CLI, TypedPatch, ContractEngine, C++ & Maxref generators
-│   └── schema/              # Contratos formales de tipos (max_contracts.json, max_object_ir.schema.json)
-├── meta-skills/             # Orquestadores agnósticos del pipeline Harmos
-│   ├── max-transpiler-scout/# Auditoría estática y extracción políglota de IR
-│   └── max-runtime-gatekeeper/ # Verificación en caliente de Max.exe y oráculo semántico
-├── catalog/                 # Primitivas indexadas y arquetipos de interfaz
-├── templates/               # Plantillas base C++ Min-Devkit, CMake y Node for Max
-├── scripts/                 # Guardrails de calidad (check.py, audit.py, bench.py)
-└── benchmarks/              # Suites de prueba y casos piloto para validar el motor
+│   ├── compiler/            # Motor determinista: CLI, TypedPatch, ContractEngine, extractores AST/SC, generadores C++ y Maxref
+│   └── schema/              # Contratos de tipos (max_contracts.json) y esquema IR (max_object_ir.schema.json)
+├── meta-skills/             # Habilidades agnósticas del pipeline Harmos
+│   ├── max-transpiler-scout/# Auditoría estática y extracción políglota hacia IR
+│   └── max-runtime-gatekeeper/ # Verificación en vivo en Max y oráculo semántico
+├── catalog/                 # Primitivas indexadas y arquetipos de interfaz (max_primitives.json)
+├── templates/               # Plantillas base C++ Min-Devkit, Node for Max y MaxPyLang
+├── scripts/                 # Verificadores canónicos (check.py, audit.py, bench.py)
+├── tests/                   # Suite unitaria, contratos, oráculos y paridad documental
+├── docs/                    # ADRs (docs/adr/), guías de agentes (docs/agents/) y ORACULO_LIMITES.md
+├── benchmarks/              # Suites de estrés y casos piloto para validar el motor
+├── packages/                # Paquetes Max de referencia generados para validación (ej. wilson-suite/)
+├── skills/                  # Skills de dominio y herramientas auxiliares del ecosistema
+├── odd/                     # Seguimiento de entregas bajo Organic Driven Development (odd/tasks/)
+├── pyproject.toml           # Metadatos Python, grupo dev (ruff, coverage) y reglas de linting
+├── GLOSSARY.md              # Terminología canónica del dominio arquitectónico
+├── CONTRIBUTING.md          # Guía de contribución, invariantes y flujo ODD
+└── AGENTS.md                # Reglas operativas para agentes de código
 ```
 
-> **Nota sobre los benchmarks**: Las suites incluidas en `benchmarks/` y las skills de dominio numérico asociadas corresponden a pruebas de estrés y validación funcional utilizadas durante el desarrollo del framework (ej. cálculo de afinaciones y geometría vectorial). Harmos en sí mismo es el motor agnóstico de traducción, no una librería orientada a un dominio musical particular.
+> **Nota sobre los benchmarks**: Las suites incluidas en `benchmarks/`, `packages/` y las skills de dominio asociadas corresponden a pruebas de estrés y validación funcional utilizadas durante el desarrollo del framework (ej. cálculo de afinaciones y geometría vectorial). Harmos en sí mismo es el motor agnóstico de traducción, no una librería orientada a un dominio musical particular (véase [`docs/adr/0001-separacion-motor-y-benchmarks.md`](./docs/adr/0001-separacion-motor-y-benchmarks.md)).
 
 ---
 
-## Requisitos de compilación
+## Requisitos de desarrollo y compilación
 
-- **Windows 10 / 11 (x64)**
-- **Cycling '74 Max 8.x o Max 9.x** instalado en rutas estándar
-- **Visual Studio 2022** con herramientas C++ instaladas (MSVC v143)
-- **CMake 3.24+**
-- **Git** con soporte para submódulos (para clonar `c74support/min-devkit`)
+- **Python 3.11+** (Windows, macOS o Linux para suite de tests, validación de contratos y oráculo headless C++)
+- **Dependencias de desarrollo**: `python -m pip install --group dev` (`ruff`, `coverage`; véase [`pyproject.toml`](./pyproject.toml))
+- **Compilador C++17** (`g++`, `clang++` o MSVC `cl`) para ejecutar pruebas del arnés headless (`cpp_headless_runner.py`)
+- **Cycling '74 Max 8.x o Max 9.x** instalado en rutas estándar (obligatorio para auditorías en vivo vía `scripts/audit.py`)
+- **CMake 3.24+** y submódulo `c74support/min-devkit` (para compilar externals nativos `.mxe64` / `.mxo`)
+
+Consulta [`CONTRIBUTING.md`](./CONTRIBUTING.md) para el flujo completo de contribución y checklist pre-commit.
 
 ---
 
