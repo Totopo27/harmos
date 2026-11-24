@@ -251,8 +251,10 @@ def assess_patcher_contracts(
                 )
                 continue
 
+            src_spec = "message" if src_box["maxclass"] == "message" else src_box["text"]
+            dest_spec = "message" if dest_box["maxclass"] == "message" else dest_box["text"]
             result = engine.assess_connection(
-                src_box["text"], src_outlet, dest_box["text"], dest_inlet
+                src_spec, src_outlet, dest_spec, dest_inlet
             )
             if result.status != "VALID":
                 issues = violations if result.status == "INVALID" else unverifiable

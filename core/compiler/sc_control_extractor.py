@@ -29,7 +29,7 @@ class SCControlExtractor:
                 "source_method": builder_method,
                 "source_file": f"{scale_key}.txt",
                 "total_entries": 384,
-                "default_entry": "tet31"
+                "default_entry": scale_key
             })
 
         # Si no encontró por diccionario explícito, buscar métodos que comiencen con build<Nombre>
@@ -43,7 +43,7 @@ class SCControlExtractor:
                     "source_method": f"build{bm.group(1)}",
                     "source_file": f"{raw_name}.txt",
                     "total_entries": 384,
-                    "default_entry": "tet31"
+                    "default_entry": raw_name
                 })
 
         # 2. Generación automática del control_interfaces (umenu para selector de afinaciones)
@@ -55,7 +55,7 @@ class SCControlExtractor:
                 "ui_type": "umenu",
                 "target_table": "tuning_coll",
                 "options": options,
-                "default": "tet31.txt"
+                "default": options[0]
             })
 
         return {

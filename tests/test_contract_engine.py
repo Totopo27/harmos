@@ -73,10 +73,9 @@ class TestContractEngine(unittest.TestCase):
         self.assertEqual(len(outlets), 4) # 3 matches + 1 pass-through
         self.assertEqual(outlets[3]["name"], "unmatched_pass")
 
-        # Conexión al outlet de pass-through
+        # Conexión al outlet de pass-through (`print` está declarado en max_contracts.json)
         res = self.engine.assess_connection("route 1 2 3", 3, "print", 0)
-        # print no está en catálogo base aún, debe ser UNVERIFIABLE si falta o VALID si tiene contrato
-        self.assertIn(res.status, ("VALID", "UNVERIFIABLE"))
+        self.assertEqual(res.status, "VALID")
 
     def test_bidirectional_signal_control_rejection(self):
         """Señales de audio no deben conectarse a control; control no debe conectarse a señal pura."""
@@ -201,6 +200,35 @@ class TestContractEngine(unittest.TestCase):
         self.assertEqual(self.engine.port_types({"type": "signal/float"}), {"signal", "float"})
         self.assertEqual(self.engine.port_types({"type": "anything"}), {"anything"})
         self.assertEqual(self.engine.port_types({}), {"anything"})
+
+    def test_dynamic_arity_poly_and_voice_overlay(self):
+        """poly~ debe sintetizar @inlets/@outlets dinamicos y soportar overlay de subpatcher."""
+        poly_spec = "poly~ synthVoice 16 @inlets 3 @outlets 4"
+        self.assertEqual(len(self.engine.get_inlets(poly_spec)), 3)
+        self.assertEqual(len(self.engine.get_outlets(poly_spec)), 4)
+        self.assertEqual(self.engine.assess_connection("cycle~", 0, poly_spec, 2).status, "VALID")
+        self.assertEqual(self.engine.assess_connection(poly_spec, 3, "gain~", 0).status, "VALID")
+        self.assertEqual(self.engine.assess_connection("cycle~", 0, poly_spec, 3).status, "INVALID")
+        self.assertEqual(self.engine.assess_connection(poly_spec, 4, "gain~", 0).status, "INVALID")
+
+        voice_overlay = ContractEngine(
+            object_contracts={
+                "myVoice": {
+                    "inlets": [
+                        {"id": 0, "name": "gate_in", "type": "int"},
+                        {"id": 1, "name": "pitch_sig", "type": "signal"},
+                        {"id": 2, "name": "mod_depth", "type": "float"},
+                    ],
+                    "outlets": [
+                        {"id": 0, "name": "out_l", "type": "signal"},
+                        {"id": 1, "name": "out_r", "type": "signal"},
+                        {"id": 2, "name": "env_done", "type": "bang"},
+                    ],
+                }
+            }
+        )
+        self.assertEqual(voice_overlay.resolve_inlet_index("poly~ myVoice 8", "mod_depth"), 2)
+        self.assertEqual(voice_overlay.resolve_outlet_index("poly~ myVoice 8", "env_done"), 2)
 
 
 if __name__ == "__main__":

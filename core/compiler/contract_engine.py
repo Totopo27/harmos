@@ -5,7 +5,7 @@ Consume core/schema/max_contracts.json.
 import hashlib
 import json
 from pathlib import Path
-from typing import Dict, Any, List, NamedTuple, Optional, Tuple, Union
+from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple, Union
 
 
 class IncompatibleConnectionError(ValueError):
@@ -75,6 +75,7 @@ class ContractEngine:
             self.contracts_path = Path(contracts_path)
 
         self._contracts: Dict[str, Any] = {}
+        self._overlay_names: Set[str] = set()
         self._inlet_role_map: Dict[str, Dict[str, int]] = {}
         self._outlet_role_map: Dict[str, Dict[str, int]] = {}
         self._load_contracts()
@@ -84,6 +85,7 @@ class ContractEngine:
                 inlets = self._normalize_ports(contract.get("inlets", []))
                 outlets = self._normalize_ports(contract.get("outlets", []))
                 self._contracts[name] = {"inlets": inlets, "outlets": outlets}
+                self._overlay_names.add(name)
                 self._index_object_roles(name, inlets, outlets)
 
     def _index_object_roles(self, name: str, inlets: List[Dict[str, Any]], outlets: List[Dict[str, Any]]) -> None:
@@ -150,7 +152,7 @@ class ContractEngine:
     def _synthesize_dynamic_contract(base_name: str, args: List[str]) -> Dict[str, Any]:
         """
         Synthesize dynamic inlet/outlet port layout for variable-arity Max objects:
-        unpack, pack, trigger (t), route.
+        unpack, pack, trigger (t), route, poly~.
         """
         if base_name == "unpack":
             outlets = []
@@ -247,6 +249,42 @@ class ContractEngine:
                 "outlets": outlets
             }
 
+        elif base_name == "poly~":
+            inlet_count = 2
+            outlet_count = 2
+            for idx, arg in enumerate(args):
+                if arg == "@inlets" and idx + 1 < len(args) and args[idx + 1].isdigit():
+                    inlet_count = max(1, int(args[idx + 1]))
+                elif arg == "@outlets" and idx + 1 < len(args) and args[idx + 1].isdigit():
+                    outlet_count = max(0, int(args[idx + 1]))
+            inlets = [
+                {
+                    "id": 0,
+                    "name": "target_voice_or_messages",
+                    "type": "signal/anything",
+                    "aliases": ["inlet_0", "control_in"],
+                }
+            ]
+            for i in range(1, inlet_count):
+                inlets.append(
+                    {
+                        "id": i,
+                        "name": "audio_or_signal_in" if i == 1 else f"voice_in_{i}",
+                        "type": "signal/anything",
+                        "aliases": [f"inlet_{i}", f"in_{i + 1}"],
+                    }
+                )
+            outlets = [
+                {
+                    "id": j,
+                    "name": f"audio_out_{j + 1}",
+                    "type": "signal/anything",
+                    "aliases": [f"outlet_{j}", f"out_{j + 1}"],
+                }
+                for j in range(outlet_count)
+            ]
+            return {"inlets": inlets, "outlets": outlets}
+
         return {}
 
     def get_object_contract(self, obj_name: str) -> Optional[Dict[str, Any]]:
@@ -255,6 +293,12 @@ class ContractEngine:
             return None
         base_name = tokens[0]
         args = tokens[1:]
+
+        if base_name == "poly~" and args:
+            if not args[0].startswith("@") and args[0] in self._overlay_names:
+                return self._contracts[args[0]]
+            if "@inlets" in args or "@outlets" in args:
+                return self._synthesize_dynamic_contract(base_name, args)
 
         # Dynamic arity synthesis for parameterized objects
         if args and base_name in ("unpack", "pack", "trigger", "t", "route"):

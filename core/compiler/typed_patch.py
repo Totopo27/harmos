@@ -101,13 +101,29 @@ class TypedPatch:
 
         return box
 
+    def add_message(
+        self,
+        text: str,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+        w: float = 80.0,
+        h: float = 22.0,
+    ) -> MaxBox:
+        """Create a Max message box whose literal payload is sent as a message."""
+        return self.add_box(text, x=x, y=y, w=w, h=h, extra_attributes={"maxclass": "message"})
+
+    @staticmethod
+    def _contract_spec(box: MaxBox) -> str:
+        """Resolve the contract lookup string for a MaxBox (message boxes map to 'message')."""
+        return "message" if box.maxclass == "message" else box.text
+
     def connect(
         self, src: MaxBox, src_outlet: int, dest: MaxBox, dest_inlet: int,
         *, allow_unverifiable: bool = False,
     ) -> None:
         # Validación de contrato en tiempo de diseño
         assessment = self.engine.validate_connection(
-            src.text, src_outlet, dest.text, dest_inlet,
+            self._contract_spec(src), src_outlet, self._contract_spec(dest), dest_inlet,
             allow_unverifiable=allow_unverifiable,
         )
 
@@ -126,10 +142,12 @@ class TypedPatch:
         Inserta de forma transparente una caja adaptadora si hay discrepancia de tipos
         compatible (ej. salida 'list' conectada a entrada escalar 'float' o 'int').
         """
-        self.engine.validate_connection(src.text, src_outlet, dest.text, dest_inlet)
+        src_spec = self._contract_spec(src)
+        dest_spec = self._contract_spec(dest)
+        self.engine.validate_connection(src_spec, src_outlet, dest_spec, dest_inlet)
 
-        src_outlets = self.engine.get_outlets(src.text)
-        dest_inlets = self.engine.get_inlets(dest.text)
+        src_outlets = self.engine.get_outlets(src_spec)
+        dest_inlets = self.engine.get_inlets(dest_spec)
 
         src_types = self.engine.port_types(src_outlets[src_outlet])
         dest_types = self.engine.port_types(dest_inlets[dest_inlet])
@@ -143,8 +161,8 @@ class TypedPatch:
             # Tipo de unpack según destino
             unpack_type = "f" if dest_types == {"float"} else "i"
             adapter_text = f"unpack {unpack_type} {unpack_type}"
-            self.engine.validate_connection(src.text, src_outlet, adapter_text, 0)
-            self.engine.validate_connection(adapter_text, 0, dest.text, dest_inlet)
+            self.engine.validate_connection(src_spec, src_outlet, adapter_text, 0)
+            self.engine.validate_connection(adapter_text, 0, dest_spec, dest_inlet)
             adapter_box = self.add_box(adapter_text, x=adapter_x, y=adapter_y)
 
             # Trazar cables: src -> unpack (inlet 0) y unpack (outlet 0) -> dest (inlet solicitado)
@@ -167,13 +185,15 @@ class TypedPatch:
         Resuelve dinámicamente los índices físicos de outlet e inlet mediante el contrato y conecta.
         CERO Hardcoding.
         """
+        src_spec = self._contract_spec(src)
+        dest_spec = self._contract_spec(dest)
         src_idx = (
-            self.engine.resolve_outlet_index(src.text, src_outlet)
+            self.engine.resolve_outlet_index(src_spec, src_outlet)
             if isinstance(src_outlet, str)
             else src_outlet
         )
         dest_idx = (
-            self.engine.resolve_inlet_index(dest.text, semantic_role)
+            self.engine.resolve_inlet_index(dest_spec, semantic_role)
             if isinstance(semantic_role, str)
             else semantic_role
         )

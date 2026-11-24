@@ -11,6 +11,7 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
+from benchmarks.suites import DIESIS_ROSA_CONTROL_IR
 from core.compiler.sc_voice_compiler import SCVoiceCompiler
 from scripts.audit import audit_contracts
 
@@ -24,7 +25,12 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             temp_path = f.name
 
         try:
-            res = self.compiler.compile_main_synth(temp_path, voice_patcher_name="fmVoice", polyphony=16)
+            res = self.compiler.compile_main_synth(
+                temp_path,
+                voice_patcher_name="fmVoice",
+                polyphony=16,
+                control_ir=DIESIS_ROSA_CONTROL_IR,
+            )
             self.assertTrue(res["success"])
             self.assertTrue(Path(temp_path).exists())
 
@@ -103,6 +109,25 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             violations, total_cords = audit_contracts(Path(temp_path))
             self.assertEqual(len(violations), 0, f"Contract violations in main synth: {violations}")
             self.assertGreater(total_cords, 0)
+        finally:
+            import os
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_compile_main_synth_defaults_are_domain_agnostic(self):
+        """Sin control_ir, compile_main_synth usa nombres neutrales sin artefactos diesisRosa."""
+        with tempfile.NamedTemporaryFile(suffix=".maxpat", delete=False) as f:
+            temp_path = f.name
+
+        try:
+            res = self.compiler.compile_main_synth(temp_path)
+            self.assertTrue(res["success"])
+            box_texts = [
+                b["box"]["text"]
+                for b in json.loads(Path(temp_path).read_text(encoding="utf-8"))["patcher"]["boxes"]
+            ]
+            self.assertIn("coll scale_default.txt", box_texts)
+            self.assertIn("js pitch_mapper.js", box_texts)
         finally:
             import os
             if os.path.exists(temp_path):

@@ -1,10 +1,10 @@
 """
 Harmos SC Voice Compiler: Sintetizador de subpatchers de voz Max MSP (.maxpat)
-a partir de especificaciones de grafos de síntesis de SuperCollider (SCMicroSynth/diesisRosa).
+a partir de especificaciones IR de grafos de síntesis y control (agnóstico de dominio).
 Genera parches estructurados para poly~ con cero hardcoding mediante TypedPatch.
 """
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, List
 from core.compiler.typed_patch import TypedPatch
 from core.compiler.contract_engine import ContractEngine
 
@@ -26,18 +26,18 @@ class SCVoiceCompiler:
         # in 3: Amplitud de vibrato (control message -> sig~)
         in_vib = patch.add_box("in 3", x=180.0, y=30.0)
         sig_vib = patch.add_box("sig~ 0.0", x=180.0, y=70.0)
-        patch.connect(in_vib, 0, sig_vib, 0)
+        patch.connect_semantic(in_vib, "control_output", sig_vib, "number_or_signal")
 
         # LFO de vibrato: tri~ a fVib (default 5 Hz) con escalado a señal
         vib_lfo = patch.add_box("tri~ 5.0", x=260.0, y=70.0)
         vib_amp = patch.add_box("*~", x=180.0, y=120.0)
-        patch.connect(vib_lfo, 0, vib_amp, 0)
-        patch.connect(sig_vib, 0, vib_amp, 1)
+        patch.connect_semantic(vib_lfo, "audio_out", vib_amp, "audio_in_a")
+        patch.connect_semantic(sig_vib, "signal_out", vib_amp, "audio_in_b_or_gain")
 
         # Suma de vibrato a la frecuencia fundamental base: cFrec = f + vib
         carrier_freq_sum = patch.add_box("+~", x=50.0, y=80.0)
-        patch.connect(in_freq, 0, carrier_freq_sum, 0)
-        patch.connect(vib_amp, 0, carrier_freq_sum, 1)
+        patch.connect_semantic(in_freq, "signal_output", carrier_freq_sum, "audio_in_a")
+        patch.connect_semantic(vib_amp, "multiplied_audio", carrier_freq_sum, "audio_in_b_or_offset")
 
         # Dispositivo de muteo/desactivación dinámica de poly~
         thispoly = patch.add_box("thispoly~", x=550.0, y=480.0)
@@ -58,39 +58,39 @@ class SCVoiceCompiler:
         mod2_env = patch.add_box("adsr~ 0.0 0.0 1.0 0.0", x=350.0, y=90.0)
         mod2_sig_mul = patch.add_box("*~", x=50.0, y=220.0)
 
-        patch.connect(mod2_osc, 0, mod2_index_mul, 0)
-        patch.connect(mod2_index_mul, 0, mod2_sig_mul, 0)
-        patch.connect(mod2_env, 0, mod2_sig_mul, 1)
+        patch.connect_semantic(mod2_osc, "audio_out", mod2_index_mul, "audio_in_a")
+        patch.connect_semantic(mod2_index_mul, "multiplied_audio", mod2_sig_mul, "audio_in_a")
+        patch.connect_semantic(mod2_env, "envelope_signal", mod2_sig_mul, "audio_in_b_or_gain")
 
         # 2. Modulador 1 (Operador Intermedio)
         mod1_sum = patch.add_box("+~", x=50.0, y=265.0)
-        patch.connect(carrier_freq_sum, 0, mod1_sum, 0)
-        patch.connect(mod2_sig_mul, 0, mod1_sum, 1)
+        patch.connect_semantic(carrier_freq_sum, "summed_audio", mod1_sum, "audio_in_a")
+        patch.connect_semantic(mod2_sig_mul, "multiplied_audio", mod1_sum, "audio_in_b_or_offset")
 
         mod1_osc = patch.add_box("cycle~", x=50.0, y=310.0)
-        patch.connect(mod1_sum, 0, mod1_osc, 0)
+        patch.connect_semantic(mod1_sum, "summed_audio", mod1_osc, "frequency_hz")
 
         mod1_index_mul = patch.add_box("*~ 100.0", x=50.0, y=355.0)
         mod1_env = patch.add_box("adsr~ 0.0 0.0 1.0 0.0", x=350.0, y=190.0)
         mod1_sig_mul = patch.add_box("*~", x=50.0, y=400.0)
 
-        patch.connect(mod1_osc, 0, mod1_index_mul, 0)
-        patch.connect(mod1_index_mul, 0, mod1_sig_mul, 0)
-        patch.connect(mod1_env, 0, mod1_sig_mul, 1)
+        patch.connect_semantic(mod1_osc, "audio_out", mod1_index_mul, "audio_in_a")
+        patch.connect_semantic(mod1_index_mul, "multiplied_audio", mod1_sig_mul, "audio_in_a")
+        patch.connect_semantic(mod1_env, "envelope_signal", mod1_sig_mul, "audio_in_b_or_gain")
 
         # 3. Carrier (Portadora Principal)
         carrier_sum = patch.add_box("+~", x=50.0, y=445.0)
-        patch.connect(carrier_freq_sum, 0, carrier_sum, 0)
-        patch.connect(mod1_sig_mul, 0, carrier_sum, 1)
+        patch.connect_semantic(carrier_freq_sum, "summed_audio", carrier_sum, "audio_in_a")
+        patch.connect_semantic(mod1_sig_mul, "multiplied_audio", carrier_sum, "audio_in_b_or_offset")
 
         carrier_osc = patch.add_box("cycle~", x=50.0, y=490.0)
-        patch.connect(carrier_sum, 0, carrier_osc, 0)
+        patch.connect_semantic(carrier_sum, "summed_audio", carrier_osc, "frequency_hz")
 
         carrier_env = patch.add_box("adsr~ 10 300 0.5 1000", x=350.0, y=290.0)
         carrier_amp_mul = patch.add_box("*~", x=50.0, y=535.0)
 
-        patch.connect(carrier_osc, 0, carrier_amp_mul, 0)
-        patch.connect(carrier_env, 0, carrier_amp_mul, 1)
+        patch.connect_semantic(carrier_osc, "audio_out", carrier_amp_mul, "audio_in_a")
+        patch.connect_semantic(carrier_env, "envelope_signal", carrier_amp_mul, "audio_in_b_or_gain")
 
         return {
             "mod2_env": mod2_env,
@@ -112,20 +112,22 @@ class SCVoiceCompiler:
 
         # Control de Envolventes y Desasignación de Voz (Gate)
         in_gate = inputs["in_gate"]
-        patch.connect(in_gate, 0, fm["mod2_env"], 0)
-        patch.connect(in_gate, 0, fm["mod1_env"], 0)
-        patch.connect(in_gate, 0, fm["carrier_env"], 0)
+        patch.connect_semantic(in_gate, "control_output", fm["mod2_env"], "gate_trigger")
+        patch.connect_semantic(in_gate, "control_output", fm["mod1_env"], "gate_trigger")
+        patch.connect_semantic(in_gate, "control_output", fm["carrier_env"], "gate_trigger")
 
-        # El outlet 1 de adsr~ emite un bang al completar la fase de release
-        patch.connect(fm["carrier_env"], 1, inputs["thispoly"], 0)
+        # El outlet de fin de release dispara un mensaje "0" para liberar la voz en poly~
+        release_free_msg = patch.add_message("0", x=450.0, y=430.0)
+        patch.connect_semantic(fm["carrier_env"], "envelope_completed_bang", release_free_msg, "trigger_or_set_message")
+        patch.connect_semantic(release_free_msg, "message_out", inputs["thispoly"], "mute_or_voice_messages")
 
         # Salidas Estéreo hacia poly~
         out_l = patch.add_box("out~ 1", x=50.0, y=575.0)
         out_r = patch.add_box("out~ 2", x=180.0, y=575.0)
 
         carrier_amp_mul = fm["carrier_amp_mul"]
-        patch.connect(carrier_amp_mul, 0, out_l, 0)
-        patch.connect(carrier_amp_mul, 0, out_r, 0)
+        patch.connect_semantic(carrier_amp_mul, "multiplied_audio", out_l, "signal_input")
+        patch.connect_semantic(carrier_amp_mul, "multiplied_audio", out_r, "signal_input")
 
         # Guardar archivo .maxpat
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -154,12 +156,7 @@ class SCVoiceCompiler:
                 if t.get("source_file") or t.get("name")
             ]
 
-        if not menu_items:
-            menu_items = [
-                "tet12.txt", "tet31.txt", "tet41.txt", "tet53.txt",
-                "meantone31.txt", "magic41.txt", "partch.txt", "centaur.txt"
-            ]
-        return menu_items
+        return menu_items or ["scale_default.txt"]
 
     def _build_tuning_pipeline(
         self,
@@ -167,32 +164,33 @@ class SCVoiceCompiler:
         midi_in: Any,
         control_ir: Optional[Dict[str, Any]]
     ) -> Any:
-        """Construye el pipeline de selección de escala, lectura de coll y cálculo Truax."""
+        """Construye el pipeline de selección de tabla, coll y mapeo JS."""
         menu_items = self._resolve_scale_menu_items(control_ir)
         umenu_extra = {
             "items": TypedPatch.format_umenu_items(menu_items)
         }
         scale_menu = patch.add_box("umenu", x=220.0, y=30.0, w=150.0, extra_attributes=umenu_extra)
         prepend_read = patch.add_box("prepend read", x=220.0, y=70.0)
-        patch.connect(scale_menu, 1, prepend_read, 0)
+        patch.connect_semantic(scale_menu, "item_text", prepend_read, "input_message")
 
-        # Determinar tabla por defecto según control_ir o fallback canónico
-        default_table = "tet31.txt"
+        # Determinar tabla por defecto según control_ir o fallback neutral
+        default_table = menu_items[0]
         if control_ir and "data_tables" in control_ir and control_ir["data_tables"]:
-            default_table = control_ir["data_tables"][0].get("source_file", "tet31.txt")
+            default_table = control_ir["data_tables"][0].get("source_file", default_table)
 
-        # Mapeador de afinación microtonal (coll cargando tabla 384 posiciones)
+        # Mapeador de frecuencias basado en tabla (coll)
         tuning_coll = patch.add_box(f"coll {default_table}", x=50.0, y=110.0)
-        patch.connect(prepend_read, 0, tuning_coll, 0)
-        patch.connect(midi_in, 0, tuning_coll, 0)
+        patch.connect_semantic(prepend_read, "prepended_message", tuning_coll, "address_or_message")
+        patch.connect_semantic(midi_in, "pitch", tuning_coll, "address_or_message")
 
-        # Calculador de Forma Normal de Barry Truax (js truax.js)
-        truax_calc = patch.add_box("js truax.js", x=50.0, y=160.0)
-        patch.connect(tuning_coll, 0, truax_calc, 0)
+        # Procesador JS configurable desde control_ir
+        script_file = (control_ir or {}).get("script_file", "pitch_mapper.js")
+        pitch_calc = patch.add_box(f"js {script_file}", x=50.0, y=160.0)
+        patch.connect_semantic(tuning_coll, "entry_data", pitch_calc, "js_inlet_0")
 
         # Convertir frecuencia calculada a señal para poly~
         freq_sig = patch.add_box("sig~", x=50.0, y=210.0)
-        patch.connect(truax_calc, 0, freq_sig, 0)
+        patch.connect_semantic(pitch_calc, "js_outlet_0", freq_sig, "number_or_signal")
         return freq_sig
 
     def compile_main_synth(
@@ -203,36 +201,31 @@ class SCVoiceCompiler:
         control_ir: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Sintetiza el parche principal contenedor de diesisRosa (diesisRosa.maxpat):
-        - Entrada MIDI (notein)
-        - Selector de afinaciones microtonales dinámico derivado de control_ir (umenu -> prepend read -> coll)
-        - Mapeo de frecuencia microtonal con tabla de afinaciones (coll)
-        - Compensación de fundamental por Forma Normal de Barry Truax (js truax.js)
+        Sintetiza el parche principal contenedor polifónico a partir de control_ir:
+        - Entrada MIDI (notein) -> selector dinámico (umenu -> prepend read -> coll -> js -> sig~)
         - Banco polifónico (poly~ <voice_patcher_name> <polyphony>)
-        - Master Limiter / Output (gain~ / ezdac~)
+        - Etapa de salida estéreo (gain~ / ezdac~)
         """
         patch = TypedPatch(self.engine)
 
         midi_in = patch.add_box("notein", x=50.0, y=30.0)
         freq_sig = self._build_tuning_pipeline(patch, midi_in, control_ir)
 
-        # Banco Polifónico (poly~ fmVoice 16)
+        # Banco Polifónico
         poly_synth = patch.add_box(f"poly~ {voice_patcher_name} {polyphony}", x=50.0, y=260.0)
-        # Señal de frecuencia al inlet de audio de poly~ (inlet 1)
-        patch.connect(freq_sig, 0, poly_synth, 1)
-        # Velocity de notein al inlet de control de poly~ (inlet 0) para disparar la envolvente
-        patch.connect(midi_in, 1, poly_synth, 0)
+        patch.connect_semantic(freq_sig, "signal_out", poly_synth, "audio_or_signal_in")
+        patch.connect_semantic(midi_in, "velocity", poly_synth, "target_voice_or_messages")
 
         # Etapa de salida estéreo con control de ganancia y dac
         gain_left = patch.add_box("gain~", x=50.0, y=320.0)
         gain_right = patch.add_box("gain~", x=180.0, y=320.0)
 
-        patch.connect(poly_synth, 0, gain_left, 0)
-        patch.connect(poly_synth, 1, gain_right, 0)
+        patch.connect_semantic(poly_synth, "audio_out_1", gain_left, "audio_in")
+        patch.connect_semantic(poly_synth, "audio_out_2", gain_right, "audio_in")
 
         dac = patch.add_box("ezdac~", x=50.0, y=380.0)
-        patch.connect(gain_left, 0, dac, 0)
-        patch.connect(gain_right, 0, dac, 1)
+        patch.connect_semantic(gain_left, "audio_out", dac, "audio_left")
+        patch.connect_semantic(gain_right, "audio_out", dac, "audio_right")
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         patch.save(output_path)

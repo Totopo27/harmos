@@ -7,9 +7,11 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
-from core.compiler.sc_voice_compiler import SCVoiceCompiler
+from core.compiler.cli import compile_ir
 from core.compiler.contract_engine import ContractEngine
-from scripts.audit import audit_contracts
+from core.compiler.sc_ast_extractor import SCAstExtractor
+from core.compiler.sc_voice_compiler import SCVoiceCompiler
+from scripts.audit import assess_patcher_contracts, audit_contracts, audit_provenance
 
 
 class TestFMVoiceCompiler(unittest.TestCase):
@@ -55,15 +57,80 @@ class TestFMVoiceCompiler(unittest.TestCase):
             # 5. Integridad de cables (patchlines)
             self.assertGreater(len(lines), 5, "El parche debe tener conexiones válidas entre operadores")
 
-            # 6. Verificación formal de contratos en el patcher sintetizado
-            violations, total_cords = audit_contracts(Path(temp_path))
-            self.assertEqual(len(violations), 0, f"Contract violations in fmVoice: {violations}")
-            self.assertGreater(total_cords, 0)
+            # 6. Verificación de caja message "0" entre adsr~ y thispoly~
+            box_by_id = {b["box"]["id"]: b["box"] for b in boxes}
+            msg_boxes = [b for b in box_by_id.values() if b.get("maxclass") == "message" and b.get("text") == "0"]
+            self.assertEqual(len(msg_boxes), 1, "Debe incluir caja message '0' para liberar la voz")
+            msg_id = msg_boxes[0]["id"]
+            cords = [(ln["patchline"]["source"], ln["patchline"]["destination"]) for ln in lines]
+            self.assertTrue(
+                any(box_by_id[s[0]]["text"].startswith("adsr~") and s[1] == 1 and d == [msg_id, 0] for s, d in cords)
+            )
+            self.assertTrue(
+                any(s == [msg_id, 0] and box_by_id[d[0]]["text"] == "thispoly~" and d[1] == 0 for s, d in cords)
+            )
+
+            # 7. Verificación formal de contratos en el patcher sintetizado
+            audit_res = assess_patcher_contracts(Path(temp_path))
+            self.assertEqual(audit_res.violations, [], f"Contract violations in fmVoice: {audit_res.violations}")
+            self.assertEqual(audit_res.unverifiable, [], f"Unverifiable cords in fmVoice: {audit_res.unverifiable}")
+            self.assertGreater(audit_res.checked, 0)
 
         finally:
             import os
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    def test_sc_voice_compiler_uses_semantic_connections_only(self):
+        source = Path("core/compiler/sc_voice_compiler.py").read_text(encoding="utf-8")
+        self.assertNotIn("patch.connect(", source)
+        self.assertIn("patch.connect_semantic(", source)
+
+    def test_sc_to_ir_cpp_patcher_audit_end_to_end(self):
+        """End-to-end: SC SynthDef + control -> IR -> C++/Patcher/Maxref -> Contract & Provenance audit."""
+        sc_source = r"""
+        (
+        scales[\custom24] = self.build24;
+        SynthDef(\harmosVoice, {
+            arg out = 0, freq = 440, gate = 1;
+            var env = EnvGen.kr(Env.adsr(0.01, 0.2, 0.5, 0.4), gate);
+            var sig = SinOsc.ar(freq) * env;
+            Out.ar(out, sig ! 2);
+        }).add;
+        )
+        """
+        ir = SCAstExtractor().extract(sc_source, default_name="harmosVoice")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ir_path = root / "harmosVoice.ir.json"
+            ir_path.write_text(json.dumps(ir), encoding="utf-8")
+
+            pkg_dir = root / "pkg"
+            compiled = compile_ir(str(ir_path), str(pkg_dir), build=False)
+            self.assertTrue(compiled["success"])
+            maxpat_path = Path(compiled["maxpat_path"])
+            self.assertTrue(Path(compiled["cpp_path"]).is_file())
+            self.assertTrue(Path(compiled["kernel_path"]).is_file())
+            self.assertTrue(Path(compiled["maxref_path"]).is_file())
+
+            prov_verdict, prov_details = audit_provenance(maxpat_path, ir_path=ir_path)
+            self.assertEqual(prov_verdict, "VALID", prov_details)
+
+            pkg_audit = assess_patcher_contracts(maxpat_path, ContractEngine.from_ir(ir))
+            self.assertEqual(pkg_audit.violations, [])
+            self.assertEqual(pkg_audit.unverifiable, [])
+
+            voice_path = pkg_dir / "harmosVoice_voice.maxpat"
+            main_path = pkg_dir / "harmosVoice_main.maxpat"
+            self.compiler.compile_fm_voice(str(voice_path), ir_data=ir)
+            self.compiler.compile_main_synth(str(main_path), voice_patcher_name="harmosVoice_voice", control_ir=ir)
+
+            for p in (voice_path, main_path):
+                res = assess_patcher_contracts(p)
+                self.assertEqual(res.violations, [], res)
+                self.assertEqual(res.unverifiable, [], res)
+            main_texts = [b["box"]["text"] for b in json.loads(main_path.read_text(encoding="utf-8"))["patcher"]["boxes"]]
+            self.assertIn("coll custom24.txt", main_texts)
 
 
 if __name__ == "__main__":
