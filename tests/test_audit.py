@@ -617,6 +617,15 @@ class TestContractGate(unittest.TestCase):
             any("Contratos verificados: 1 conexiones" in d for d in details), details
         )
 
+    def test_message_box_signal_rejection_is_violation(self):
+        patcher = self._write_patcher(
+            [self._box("obj-1", "cycle~ 440"), self._box("obj-2", "0", "message")],
+            [self._line("obj-1", 0, "obj-2", 0)],
+        )
+        res = audit.assess_patcher_contracts(patcher)
+        self.assertEqual(len(res.violations), 1)
+        self.assertEqual(res.unverifiable, [])
+
 
 class TestStaticGateOrdering(unittest.TestCase):
     """

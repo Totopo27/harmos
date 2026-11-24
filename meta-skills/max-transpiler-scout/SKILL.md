@@ -19,7 +19,7 @@ Cargar cuando se requiera auditar un repositorio o código fuente externo (en cu
 - **Prioridad de Objeto Nativo (Max SDK First)**:
   - Diseñar la solución prioritariamente como objeto nativo C++ Min-Devkit (`min.object`, `min.dsp`, `ui_operator` con JGraphics) o `jsui` para UI en el patcher.
   - Prohibido recurrir a `jweb` como atajo inicial; solo se admite como excepción justificada si se demuestra inviabilidad técnica en el lienzo de Max.
-- **Ley de Cero Reinvención**: Consultar `catalog/max_primitives.json`. Si un requerimiento lo resuelve un objeto estándar (`cycle~`, `makenote`, `dict`, `sprintf`), descartar la creación de externals C++ redundantes.
+- **Ley de Cero Reinvención**: Consultar `core/schema/max_contracts.json` (fuente de verdad actual; `catalog/max_primitives.json` está obsoleto). Si un requerimiento lo resuelve un objeto estándar (`cycle~`, `makenote`, `dict`, `sprintf`), descartar la creación de externals C++ redundantes.
 - **Salida en IR Formal**: El scout debe emitir siempre la especificación estructurada conforme a `core/schema/max_object_ir.schema.json`.
 
 ## Decision Gates
@@ -35,7 +35,7 @@ Cargar cuando se requiera auditar un repositorio o código fuente externo (en cu
 ## Execution Steps
 
 1. Inspeccionar arquitectura, dependencias y algoritmos del proyecto fuente.
-2. Mapear primitivas nativas reutilizables desde `catalog/max_primitives.json`.
+2. Mapear primitivas nativas reutilizables y firmas de puertos desde `core/schema/max_contracts.json`.
 3. Determinar el arquetipo de interfaz (`catalog/archetypes/`) y clasificar la estrategia técnica en la matriz de decisión.
 4. Generar el esquema de Representación Intermedia en `benchmarks/<proyecto>/<objeto>_ir.json`.
 5. Validar que la IR cumpla con los tipos esperados en `core/schema/max_contracts.json`.
@@ -48,4 +48,4 @@ Cargar cuando se requiera auditar un repositorio o código fuente externo (en cu
 ## References
 
 - `core/schema/max_object_ir.schema.json` — Esquema de la representación intermedia.
-- `catalog/max_primitives.json` — Catálogo de primitivas de Cycling '74.
+- `core/schema/max_contracts.json` — Catálogo canónico de contratos y tipos de Cycling '74 (`catalog/max_primitives.json` es solo histórico).
