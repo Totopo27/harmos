@@ -12,6 +12,7 @@ c74support/min-devkit/
 # Build artifacts
 build/
 build_harmos/
+build_e2e/
 *.obj
 *.exe
 *.recipe
@@ -31,3 +32,5 @@ cases_*.jsonl
 # Python artifacts
 __pycache__/
 *.py[cod]
+.ruff_cache/
+.coverage

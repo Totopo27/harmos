@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from core.compiler.sc_voice_compiler import SCVoiceCompiler
 from core.compiler.contract_engine import ContractEngine
+from scripts.audit import audit_contracts
 
 
 class TestFMVoiceCompiler(unittest.TestCase):
@@ -53,6 +54,11 @@ class TestFMVoiceCompiler(unittest.TestCase):
 
             # 5. Integridad de cables (patchlines)
             self.assertGreater(len(lines), 5, "El parche debe tener conexiones válidas entre operadores")
+
+            # 6. Verificación formal de contratos en el patcher sintetizado
+            violations, total_cords = audit_contracts(Path(temp_path))
+            self.assertEqual(len(violations), 0, f"Contract violations in fmVoice: {violations}")
+            self.assertGreater(total_cords, 0)
 
         finally:
             import os

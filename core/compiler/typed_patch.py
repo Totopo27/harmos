@@ -3,8 +3,8 @@ Harmos TypedPatch: Compilador de parches de Max MSP (.maxpat) con validación es
 Genera el árbol JSON nativo de Cycling '74 sin cables hardcodeados a ciegas.
 """
 import json
-from typing import Dict, Any, List, Optional
-from core.compiler.contract_engine import ContractEngine, IncompatibleConnectionError
+from typing import Dict, Any, List, Optional, Union
+from core.compiler.contract_engine import ContractEngine
 
 
 class MaxBox:
@@ -156,13 +156,28 @@ class TypedPatch:
         self.connect(src, src_outlet, dest, dest_inlet)
         return None
 
-    def connect_semantic(self, src: MaxBox, src_outlet: int, dest: MaxBox, semantic_role: str) -> None:
+    def connect_semantic(
+        self,
+        src: MaxBox,
+        src_outlet: Union[int, str],
+        dest: MaxBox,
+        semantic_role: Union[int, str]
+    ) -> None:
         """
-        Resuelve dinámicamente el inlet físico mediante el contrato y conecta.
+        Resuelve dinámicamente los índices físicos de outlet e inlet mediante el contrato y conecta.
         CERO Hardcoding.
         """
-        dest_inlet = self.engine.resolve_inlet_index(dest.text, semantic_role)
-        self.connect(src, src_outlet, dest, dest_inlet)
+        src_idx = (
+            self.engine.resolve_outlet_index(src.text, src_outlet)
+            if isinstance(src_outlet, str)
+            else src_outlet
+        )
+        dest_idx = (
+            self.engine.resolve_inlet_index(dest.text, semantic_role)
+            if isinstance(semantic_role, str)
+            else semantic_role
+        )
+        self.connect(src, src_idx, dest, dest_idx)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

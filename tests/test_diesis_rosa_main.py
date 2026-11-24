@@ -12,6 +12,7 @@ import json
 import tempfile
 from pathlib import Path
 from core.compiler.sc_voice_compiler import SCVoiceCompiler
+from scripts.audit import audit_contracts
 
 
 class TestDiesisRosaMainPatcher(unittest.TestCase):
@@ -58,6 +59,11 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             # 6. Conexiones
             self.assertGreater(len(lines), 6, "El parche principal debe tener conexiones completas")
 
+            # 7. Verificación formal de contratos en el patcher sintetizado
+            violations, total_cords = audit_contracts(Path(temp_path))
+            self.assertEqual(len(violations), 0, f"Contract violations in main synth: {violations}")
+            self.assertGreater(total_cords, 0)
+
         finally:
             import os
             if os.path.exists(temp_path):
@@ -92,6 +98,11 @@ class TestDiesisRosaMainPatcher(unittest.TestCase):
             self.assertTrue(len(umenu_boxes) >= 1)
             self.assertIn("items", umenu_boxes[0])
             self.assertIn("tet41.txt", umenu_boxes[0]["items"])
+
+            # Verificación formal de contratos en el patcher sintetizado
+            violations, total_cords = audit_contracts(Path(temp_path))
+            self.assertEqual(len(violations), 0, f"Contract violations in main synth: {violations}")
+            self.assertGreater(total_cords, 0)
         finally:
             import os
             if os.path.exists(temp_path):

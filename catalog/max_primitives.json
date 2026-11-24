@@ -1,6 +1,7 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Max Primitives Catalog",
+  "deprecated": true,
+  "deprecation_notice": "DEPRECATED: Use core/schema/max_contracts.json as the authoritative contract database. This file is preserved for legacy tooling and human reference only.",
   "description": "Catálogo canónico de objetos nativos de Max MSP para evitar reinvención de la rueda durante la traducción.",
   "categories": {
     "math_and_logic": [

@@ -18,12 +18,10 @@ class SCControlExtractor:
         # 1. Detección de asociaciones de escalas (self.scales[\key] = self.method;)
         # Ej: self.scales[\tet31] = self.build31TET;
         scale_dict_matches = re.finditer(r"scales\[\\?(\w+)\]\s*=\s*self\.(\w+);", source_code)
-        detected_scales = []
 
         for m in scale_dict_matches:
             scale_key = m.group(1)
             builder_method = m.group(2)
-            detected_scales.append(scale_key)
 
             data_tables.append({
                 "name": scale_key,
@@ -39,7 +37,6 @@ class SCControlExtractor:
             builder_matches = re.finditer(r"build(\w+):\s*\{\s*\|self", source_code)
             for bm in builder_matches:
                 raw_name = bm.group(1).lower()
-                detected_scales.append(raw_name)
                 data_tables.append({
                     "name": raw_name,
                     "type": "coll",

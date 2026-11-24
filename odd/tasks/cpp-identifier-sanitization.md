@@ -21,9 +21,9 @@ Alcance excluido: la coercion de atributos `string` a `double` en el kernel, y e
 
 | ID | Specs | Ruta | Estado |
 | :--- | :--- | :--- | :--- |
-| T1 | S1-S4 | inline | RED: `TestCppIdentifierSafety` (4 tests, incluye compilacion real con g++/clang++) |
-| T2 | S1-S5 | inline | GREEN: `cpp_identifier` + `_attribute_identifiers` cableados en ambos generadores |
-| T3 | S1-S5 | inline | verificacion: suite completa, `check.py`, e2e sobre IR real con `cut-off` y `class` |
+| T1 | S1-S4 | inline | [x] RED: `TestCppIdentifierSafety` (4 tests, incluye compilacion real con g++/clang++) |
+| T2 | S1-S5 | inline | [x] GREEN: `cpp_identifier` + `_attribute_identifiers` cableados en ambos generadores |
+| T3 | S1-S5 | inline | [x] verificacion: suite completa, `check.py`, e2e sobre IR real con `cut-off` y `class` |
 
 ## Log
 

@@ -5,7 +5,26 @@ Prerrequisito arquitectónico para el oráculo semántico headless:
 - Wrapper Min-Devkit ({object}.cpp): Capa delgada que mapea inlets, outlets y atributos al kernel.
 """
 from typing import Dict, Any, List
+import json
 import re
+
+
+def _is_signal_port(port: Dict[str, Any]) -> bool:
+    """Return True when a port accepts or emits a Max MSP audio signal."""
+    parts = {part.strip().lower() for part in str(port.get("type", "")).split("/")}
+    return "signal" in parts
+
+
+def _cpp_string_literal(value: Any) -> str:
+    """Format any Python value as a properly quoted and escaped C++ string literal."""
+    return json.dumps("" if value is None else str(value))
+
+
+def _cpp_bool_literal(value: Any) -> str:
+    """Format an IR boolean default as lowercase C++ 'true' or 'false'."""
+    if isinstance(value, str):
+        return "true" if value.strip().lower() in ("true", "1", "yes", "on") else "false"
+    return "true" if bool(value) else "false"
 
 
 # Keywords de C++ que no pueden usarse como nombre de miembro.
@@ -80,8 +99,6 @@ def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
     category = ir.get("category", "control")
     attributes = ir.get("attributes", [])
     attribute_ids = _attribute_identifiers(attributes)
-    inlets = ir.get("inlets", [])
-    outlets = ir.get("outlets", [])
 
     is_dsp = (category == "dsp")
 
@@ -95,6 +112,7 @@ def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
     lines.append("#include <cmath>")
     lines.append("#include <algorithm>")
     lines.append("#include <cstddef>")
+    lines.append("#include <string>")
     lines.append("")
     lines.append("namespace harmos::kernels {")
     lines.append("")
@@ -106,12 +124,19 @@ def generate_cpp_kernel(ir: Dict[str, Any]) -> str:
     for attr in attributes:
         attr_name = attribute_ids[str(attr.get("name", "param"))]
         attr_type = attr.get("type", "double")
+        raw_def = attr.get("default")
         if attr_type == "float":
             cpp_type = "double"
-            default_val = str(attr.get("default", 0.0))
+            default_val = str(0.0 if raw_def is None else raw_def)
         elif attr_type in ["int", "integer"]:
             cpp_type = "int"
-            default_val = str(attr.get("default", 0))
+            default_val = str(0 if raw_def is None else raw_def)
+        elif attr_type in ["symbol", "string"]:
+            cpp_type = "std::string"
+            default_val = _cpp_string_literal(raw_def)
+        elif attr_type == "bool":
+            cpp_type = "bool"
+            default_val = _cpp_bool_literal(raw_def)
         else:
             cpp_type = "double"
             default_val = "0.0"
@@ -178,7 +203,10 @@ def generate_min_wrapper(ir: Dict[str, Any], kernel_header_name: str) -> str:
     lines.append("")
     lines.append("using namespace c74::min;")
     lines.append("")
-    lines.append(f"class {safe_class_name} : public object<{safe_class_name}>" + (f", public sample_operator<2, 2>" if is_dsp else "") + " {")
+    n_sig_in = max(1, sum(1 for i in inlets if _is_signal_port(i)))
+    n_sig_out = max(1, sum(1 for o in outlets if _is_signal_port(o)))
+
+    lines.append(f"class {safe_class_name} : public object<{safe_class_name}>" + (f", public sample_operator<{n_sig_in}, {n_sig_out}>" if is_dsp else "") + " {")
     lines.append("private:")
     lines.append(f"    harmos::kernels::{safe_class_name}Kernel m_kernel;")
     lines.append("")
@@ -212,14 +240,31 @@ def generate_min_wrapper(ir: Dict[str, Any], kernel_header_name: str) -> str:
         original_name = str(attr.get("name", "param"))
         attr_name = attribute_ids[original_name]
         attr_type = attr.get("type", "float")
-        attr_def = attr.get("default", 0.0 if attr_type == "float" else 0)
         attr_desc = attr.get("description", "Param")
-        lines.append(f'    attribute<{attr_type}> {attr_name} {{ this, "{original_name}", {attr_def},')
+        raw_def = attr.get("default")
+        if attr_type in ["symbol", "string"]:
+            min_type = "symbol"
+            min_def = _cpp_string_literal(raw_def)
+            setter_rhs = "std::string(args[0])"
+        elif attr_type == "bool":
+            min_type = "bool"
+            min_def = _cpp_bool_literal(raw_def)
+            setter_rhs = "static_cast<bool>(args[0])"
+        elif attr_type in ["int", "integer"]:
+            min_type = "int"
+            min_def = str(0 if raw_def is None else raw_def)
+            setter_rhs = "static_cast<int>(args[0])"
+        else:
+            min_type = "double" if attr_type == "double" else "float"
+            min_def = str(0.0 if raw_def is None else raw_def)
+            setter_rhs = "static_cast<double>(args[0])"
+
+        lines.append(f'    attribute<{min_type}> {attr_name} {{ this, "{original_name}", {min_def},')
         lines.append(f'        description {{"{attr_desc}"}},')
-        lines.append(f'        setter {{ MIN_FUNCTION {{')
-        lines.append(f'            m_kernel.{attr_name} = static_cast<double>(args[0]);')
-        lines.append(f'            return args;')
-        lines.append(f'        }} }}')
+        lines.append('        setter { MIN_FUNCTION {')
+        lines.append(f'            m_kernel.{attr_name} = {setter_rhs};')
+        lines.append('            return args;')
+        lines.append('        } }')
         lines.append("    };")
 
     lines.append("")
@@ -228,16 +273,32 @@ def generate_min_wrapper(ir: Dict[str, Any], kernel_header_name: str) -> str:
 
     if is_dsp:
         lines.append("    // Delegación en sample_operator")
-        lines.append("    sample operator()(sample in) {")
-        lines.append("        return m_kernel.process_sample(in);")
-        lines.append("    }")
+        in_names = ["in"] if n_sig_in == 1 else [f"in_{i}" for i in range(n_sig_in)]
+        params = ", ".join(f"sample {name}" for name in in_names)
+        if n_sig_out == 1:
+            lines.append(f"    sample operator()({params}) {{")
+            for extra in in_names[1:]:
+                lines.append(f"        (void){extra};")
+            lines.append(f"        return m_kernel.process_sample({in_names[0]});")
+            lines.append("    }")
+        else:
+            lines.append(f"    samples<{n_sig_out}> operator()({params}) {{")
+            for extra in in_names[n_sig_out:]:
+                lines.append(f"        (void){extra};")
+            calls = ", ".join(
+                f"m_kernel.process_sample({in_names[min(ch, n_sig_in - 1)]})"
+                for ch in range(n_sig_out)
+            )
+            lines.append(f"        return {{ {{ {calls} }} }};")
+            lines.append("    }")
     else:
         lines.append('    message<> number { this, "number", "Procesa entrada numerica via kernel puro",')
         lines.append("        MIN_FUNCTION {")
         lines.append("            double val = static_cast<double>(args[0]);")
         lines.append("            double res = m_kernel.process_scalar(val);")
         if outlets:
-            lines.append("            out_0.send(res);")
+            first_out_id = outlets[0].get("id", 0)
+            lines.append(f"            out_{first_out_id}.send(res);")
         lines.append("            return {};")
         lines.append("        }")
         lines.append("    };")

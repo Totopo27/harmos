@@ -21,10 +21,10 @@ Rama: `fix/audit-static-gates-order` · Entrega: un work-unit commit · Runner: 
 
 | ID | Specs | Ruta | Estado |
 | :--- | :--- | :--- | :--- |
-| T1 | S1-S4 | inline | RED: tests que fallan contra el orden actual |
-| T2 | S1-S5 | inline | GREEN: reorden en `audit_patcher_live` |
-| T3 | S6 | inline | docs |
-| T4 | S1-S6 | inline | verificación: suite, `check.py`, e2e sin y con Max |
+| T1 | S1-S4 | inline | [x] RED: tests que fallan contra el orden actual |
+| T2 | S1-S5 | inline | [x] GREEN: reorden en `audit_patcher_live` |
+| T3 | S6 | inline | [x] docs |
+| T4 | S1-S6 | inline | [x] verificación: suite, `check.py`, e2e sin y con Max |
 
 ## Log
 

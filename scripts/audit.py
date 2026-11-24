@@ -294,19 +294,27 @@ def resolve_max_executable() -> Optional[Path]:
         except Exception:
             pass
 
+    if sys.platform == "darwin":
+        for version in ("Max 9", "Max 8", "Max"):
+            for candidate in (
+                Path(f"/Applications/{version}.app/Contents/MacOS/Max"),
+                Path.home() / f"Applications/{version}.app/Contents/MacOS/Max",
+            ):
+                if candidate.is_file():
+                    return candidate
+
     # Rutas por defecto en Windows: se recorren los directorios de programa
-    # declarados por el entorno y las unidades fijas del host. El codigo nunca
-    # codifica rutas absolutas de host.
+    # declarados por el entorno. El codigo nunca codifica rutas absolutas de host.
     roots = []
     for env_name in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
         root = os.environ.get(env_name)
         if root and root not in roots:
             roots.append(root)
     if sys.platform == "win32":
-        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-            candidate_root = f"{letter}:\\Program Files"
-            if candidate_root not in roots and Path(candidate_root).is_dir():
-                roots.append(candidate_root)
+        sys_drive = os.environ.get("SystemDrive", "C:")
+        candidate_root = f"{sys_drive}\\Program Files"
+        if candidate_root not in roots and Path(candidate_root).is_dir():
+            roots.append(candidate_root)
 
     candidates = []
     for root in roots:
@@ -325,36 +333,40 @@ def resolve_max_log_path(max_exe: Optional[Path] = None) -> Optional[Path]:
     """
     Localiza el archivo Max.log dentro de la carpeta de usuario de Max.
 
-    En Max 9 la ruta canonica es <APPDATA>/Cycling '74/Max 9/Logs/Max.log.
-    Si se suministra max_exe se prioriza la carpeta de la version detectada y,
-    cuando hay varias instalaciones, se elige de forma deterministica (ordenada).
+    En Max 9 la ruta canonica es <APPDATA>/Cycling '74/Max 9/Logs/Max.log (Windows)
+    o ~/Library/Logs/Cycling '74/Max 9/Max.log (macOS). Si max_exe revela la version
+    ("Max 9"), se prefiere el log de esa version en ambas plataformas.
     """
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        return None
-
-    base = Path(appdata) / "Cycling '74"
-    if not base.exists():
-        return None
-
     wants = None
     if max_exe:
-        exe_str = str(max_exe).lower()
-        if "max 9" in exe_str:
-            wants = "max 9"
-        elif "max 8" in exe_str:
-            wants = "max 8"
+        version = re.search(r"\bmax (\d+)\b", str(max_exe).lower())
+        if version:
+            wants = f"max {version.group(1)}"
 
-    candidates = sorted(
-        (p for p in base.glob("*/Logs/Max.log") if p.is_file()),
-        key=lambda p: str(p).lower(),
-    )
+    candidates: List[Path] = []
+    if sys.platform == "darwin":
+        mac_bases = [
+            Path.home() / "Library" / "Logs" / "Cycling '74",
+            Path.home() / "Library" / "Application Support" / "Cycling '74",
+        ]
+        for base in mac_bases:
+            if base.exists():
+                candidates.extend(p for p in base.glob("*/Logs/Max.log") if p.is_file())
+                candidates.extend(p for p in base.glob("*/Max.log") if p.is_file())
+
+    if not candidates:
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) / "Cycling '74" if appdata else None
+        if base is not None and base.exists():
+            candidates.extend(p for p in base.glob("*/Logs/Max.log") if p.is_file())
+
+    candidates = sorted(set(candidates), key=lambda p: str(p).lower())
     if not candidates:
         return None
 
     if wants:
         for candidate in candidates:
-            if wants in str(candidate.parent.parent).lower():
+            if wants in (part.lower() for part in candidate.parts):
                 return candidate
 
     return candidates[0]
@@ -584,7 +596,16 @@ def audit_patcher_live(
                 session_lines = load_session_lines(max_log, launched_after) or session_lines
                 break
     finally:
-        # Cerrar el proceso para no dejar procesos huerfanos en CI/testing.
+        # Cerrar el proceso y su arbol completo para no dejar procesos huerfanos.
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
+                    check=False
+                )
+            except Exception:
+                pass
         try:
             proc.terminate()
             proc.wait(timeout=3)

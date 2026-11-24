@@ -32,7 +32,7 @@
         "required": ["id", "type", "description"],
         "properties": {
           "id": { "type": "integer" },
-          "type": { "type": "string", "enum": ["int", "float", "symbol", "list", "anything", "signal"] },
+          "type": { "type": "string", "pattern": "^(int|float|number|symbol|list|bang|anything|signal)(/[a-z]+)*$" },
           "description": { "type": "string" }
         }
       }
@@ -44,7 +44,7 @@
         "required": ["id", "type", "description"],
         "properties": {
           "id": { "type": "integer" },
-          "type": { "type": "string", "enum": ["int", "float", "symbol", "list", "anything", "signal"] },
+          "type": { "type": "string", "pattern": "^(int|float|number|symbol|list|bang|anything|signal)(/[a-z]+)*$" },
           "description": { "type": "string" }
         }
       }

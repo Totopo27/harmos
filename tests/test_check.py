@@ -7,6 +7,8 @@ Las muestras se construyen en tiempo de ejecucion para que este propio archivo
 no contenga rutas literales que el guardrail deba rechazar.
 """
 import re
+import shutil
+import subprocess
 import unittest
 import contextlib
 import io
@@ -14,7 +16,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from scripts.check import FORBIDDEN_PATTERNS, SCANNED_EXTENSIONS, validate_json_schemas
+from scripts.check import FORBIDDEN_PATTERNS, SCANNED_EXTENSIONS, scan_for_leaks_and_pii, validate_json_schemas
 
 BACKSLASH = "\\"
 FORWARD_SLASH = "/"
@@ -51,6 +53,49 @@ class TestForbiddenPatterns(unittest.TestCase):
     def test_scanned_extensions_include_yaml(self):
         self.assertIn(".yml", SCANNED_EXTENSIONS)
         self.assertIn(".yaml", SCANNED_EXTENSIONS)
+
+    def test_detects_macos_user_profile(self):
+        sample = "export PATH=" + FORWARD_SLASH + "Users" + FORWARD_SLASH + "developer" + FORWARD_SLASH + "bin"
+        self.assertTrue(_matches(sample))
+
+    def test_detects_fine_grained_token_aws_key_and_private_key(self):
+        # Built at runtime so this file never contains a literal secret.
+        for sample in [
+            "token = " + "github" + "_pat_" + "A1" * 15,
+            "key = " + "AK" + "IA" + "ABCDEFGHIJKLMNOP",
+            "-----BEGIN " + "RSA PRIVATE" + " KEY-----",
+            "-----BEGIN " + "PRIVATE" + " KEY-----",
+        ]:
+            with self.subTest(sample=sample[:16]):
+                self.assertTrue(_matches(sample))
+
+    def test_scanned_extensions_include_config_and_script_files(self):
+        for ext in (".toml", ".env", ".sh", ".xml"):
+            self.assertIn(ext, SCANNED_EXTENSIONS)
+
+
+class TestUntrackedScan(unittest.TestCase):
+    def _git(self, root, *args):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+    def test_untracked_files_are_scanned_and_ignored_files_are_not(self):
+        if shutil.which("git") is None:
+            self.skipTest("git no disponible")
+        secret = "ghp" + "_" + "x" * 24
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._git(root, "init", "-q")
+            (root / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+            (root / "ignored").mkdir()
+            (root / "ignored" / "notes.md").write_text(secret, encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertTrue(scan_for_leaks_and_pii(root))
+
+            (root / ".env").write_text("TOKEN=" + secret, encoding="utf-8")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertFalse(scan_for_leaks_and_pii(root))
+            self.assertIn(".env", output.getvalue())
 
 class TestContractStructureCheck(unittest.TestCase):
     def test_parseable_json_is_not_sufficient_contract_evidence(self):

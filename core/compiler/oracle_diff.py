@@ -4,9 +4,8 @@ Inspirado en el estándar de verificación diferencial de rust-anything (diff).
 Ejecuta casos de prueba (cases.jsonl) contra implementaciones destino,
 comparando resultados con tolerancia de punto flotante y verificando rutas de error.
 """
-import math
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from core.compiler.oracle_harvest import TestCase
 
 

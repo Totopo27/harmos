@@ -3,7 +3,6 @@ Harmos Microtonal Engine: Traducción del Dominio Microtonal y Forma Normal de B
 Genera tablas de afinación de 384 posiciones (3 canales MIDI) compatibles con coll/buffer~
 y scripts JavaScript optimizados para el objeto [js] de Max.
 """
-import math
 from typing import Dict, List, Tuple
 
 
@@ -127,10 +126,26 @@ class MicrotonalEngine:
             "centaur": self.build_centaur(),
         }
 
+    def get_scale(self, scale_key: str) -> List[float]:
+        """Obtiene una escala específica de manera perezosa (lazy evaluation) sin calcular las demás."""
+        scale_builders = {
+            "tet12": lambda: self.build_tet(12, ref_note=69),
+            "tet31": lambda: self.build_tet(31, ref_note=124),
+            "tet41": lambda: self.build_tet(41, ref_note=164),
+            "tet53": lambda: self.build_tet(53, ref_note=212),
+            "meantone31": self.build_meantone31,
+            "magic41": self.build_magic41,
+            "partch": self.build_partch43,
+            "centaur": self.build_centaur,
+        }
+        builder = scale_builders.get(scale_key)
+        if builder:
+            return builder()
+        return self.build_tet(12, ref_note=69)
+
     def export_as_coll(self, scale_key: str) -> str:
         """Exporta la escala en formato de archivo de texto compatible con el objeto coll de Max."""
-        scales = self.generate_all_scales()
-        scale = scales.get(scale_key, scales["tet12"])
+        scale = self.get_scale(scale_key)
         lines = [f"{i}, {freq:.6f};" for i, freq in enumerate(scale)]
         return "\n".join(lines) + "\n"
 

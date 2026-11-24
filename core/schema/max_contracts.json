@@ -1,8 +1,20 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "MaxObjectContractRules",
   "description": "Especificación estricta de contratos de entradas y salidas de Max MSP para generación dinámica sin hardcoding.",
   "objects": {
+    "comment": {
+      "inlets": {},
+      "outlets": {}
+    },
+    "number": {
+      "inlets": {
+        "0": { "name": "value_or_message", "type": "int/float/bang", "aliases": ["input", "in"] }
+      },
+      "outlets": {
+        "0": { "name": "value", "type": "int", "aliases": ["out"] },
+        "1": { "name": "tab", "type": "bang" }
+      }
+    },
     "flonum": {
       "inlets": {
         "0": { "name": "value_or_message", "type": "float" }
@@ -14,8 +26,16 @@
     },
     "cycle~": {
       "inlets": {
-        "0": { "name": "frequency_hz_or_phase", "type": "signal" },
-        "1": { "name": "phase_offset", "type": "signal" }
+        "0": {
+          "name": "frequency_hz",
+          "type": "signal/float",
+          "aliases": ["freq", "frequency", "frequency_hz_or_phase"]
+        },
+        "1": {
+          "name": "phase_offset",
+          "type": "signal/float",
+          "aliases": ["phase"]
+        }
       },
       "outlets": {
         "0": { "name": "audio_out", "type": "signal" }
@@ -27,7 +47,8 @@
         "1": { "name": "gain_control", "type": "int" }
       },
       "outlets": {
-        "0": { "name": "audio_out", "type": "signal" }
+        "0": { "name": "audio_out", "type": "signal" },
+        "1": { "name": "slider_position", "type": "int", "aliases": ["position", "gain_value"] }
       }
     },
     "ezdac~": {
@@ -36,6 +57,20 @@
         "1": { "name": "audio_right", "type": "signal" }
       },
       "outlets": []
+    },
+    "dac~": {
+      "inlets": {
+        "0": { "name": "audio_left", "type": "signal", "aliases": ["left", "ch1"] },
+        "1": { "name": "audio_right", "type": "signal", "aliases": ["right", "ch2"] }
+      },
+      "outlets": []
+    },
+    "adc~": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "audio_left", "type": "signal", "aliases": ["left", "ch1"] },
+        "1": { "name": "audio_right", "type": "signal", "aliases": ["right", "ch2"] }
+      }
     },
     "notein": {
       "inlets": {
@@ -144,7 +179,8 @@
         "1": { "name": "in_low", "type": "float" },
         "2": { "name": "in_high", "type": "float" },
         "3": { "name": "out_low", "type": "float" },
-        "4": { "name": "out_high", "type": "float" }
+        "4": { "name": "out_high", "type": "float" },
+        "5": { "name": "exponential_power", "type": "float" }
       },
       "outlets": {
         "0": { "name": "scaled_output", "type": "float" }
@@ -217,7 +253,7 @@
     "lores~": {
       "inlets": {
         "0": { "name": "audio_in", "type": "signal" },
-        "1": { "name": "cutoff_freq_hz", "type": "float" },
+        "1": { "name": "cutoff_freq_hz", "type": "signal/float" },
         "2": { "name": "resonance_factor", "type": "float" }
       },
       "outlets": {
@@ -227,7 +263,7 @@
     "*~": {
       "inlets": {
         "0": { "name": "audio_in_a", "type": "signal" },
-        "1": { "name": "audio_in_b_or_gain", "type": "signal" }
+        "1": { "name": "audio_in_b_or_gain", "type": "signal/float" }
       },
       "outlets": {
         "0": { "name": "multiplied_audio", "type": "signal" }
@@ -236,7 +272,7 @@
     "+~": {
       "inlets": {
         "0": { "name": "audio_in_a", "type": "signal" },
-        "1": { "name": "audio_in_b_or_offset", "type": "signal" }
+        "1": { "name": "audio_in_b_or_offset", "type": "signal/float" }
       },
       "outlets": {
         "0": { "name": "summed_audio", "type": "signal" }
@@ -245,7 +281,7 @@
     "-~": {
       "inlets": {
         "0": { "name": "audio_in_a", "type": "signal" },
-        "1": { "name": "audio_in_b", "type": "signal" }
+        "1": { "name": "audio_in_b", "type": "signal/float" }
       },
       "outlets": {
         "0": { "name": "subtracted_audio", "type": "signal" }
@@ -253,7 +289,7 @@
     },
     "phasor~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "phase_reset", "type": "signal" }
       },
       "outlets": {
@@ -262,7 +298,7 @@
     },
     "saw~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "phase_offset", "type": "float" }
       },
       "outlets": {
@@ -271,7 +307,7 @@
     },
     "rect~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "duty_cycle", "type": "signal" }
       },
       "outlets": {
@@ -280,11 +316,11 @@
     },
     "adsr~": {
       "inlets": {
-        "0": { "name": "gate_trigger", "type": "signal" },
-        "1": { "name": "attack_time_ms", "type": "float" },
-        "2": { "name": "decay_time_ms", "type": "float" },
-        "3": { "name": "sustain_gain", "type": "float" },
-        "4": { "name": "release_time_ms", "type": "float" }
+        "0": { "name": "gate_trigger", "type": "signal/float/bang", "aliases": ["gate", "trigger"] },
+        "1": { "name": "attack_time_ms", "type": "float", "aliases": ["attack"] },
+        "2": { "name": "decay_time_ms", "type": "float", "aliases": ["decay"] },
+        "3": { "name": "sustain_gain", "type": "float", "aliases": ["sustain"] },
+        "4": { "name": "release_time_ms", "type": "float", "aliases": ["release"] }
       },
       "outlets": {
         "0": { "name": "envelope_signal", "type": "signal" },
@@ -393,7 +429,7 @@
     },
     "tri~": {
       "inlets": {
-        "0": { "name": "frequency_hz", "type": "signal" },
+        "0": { "name": "frequency_hz", "type": "signal/float" },
         "1": { "name": "duty_cycle", "type": "signal" }
       },
       "outlets": {
@@ -408,7 +444,8 @@
       "outlets": {
         "0": { "name": "entry_data", "type": "anything" },
         "1": { "name": "index_or_key", "type": "anything" },
-        "2": { "name": "dump_out", "type": "anything" }
+        "2": { "name": "not_found_bang", "type": "bang" },
+        "3": { "name": "dump_out", "type": "anything" }
       }
     },
     "buffer~": {
@@ -463,8 +500,8 @@
         "0": { "name": "input_value", "type": "anything" }
       },
       "outlets": {
-        "0": { "name": "outlet_right", "type": "anything" },
-        "1": { "name": "outlet_left", "type": "anything" }
+        "0": { "name": "outlet_left", "type": "anything", "aliases": ["left", "out_0"] },
+        "1": { "name": "outlet_right", "type": "anything", "aliases": ["right", "out_1"] }
       }
     },
     "t": {
@@ -472,8 +509,8 @@
         "0": { "name": "input_value", "type": "anything" }
       },
       "outlets": {
-        "0": { "name": "outlet_right", "type": "anything" },
-        "1": { "name": "outlet_left", "type": "anything" }
+        "0": { "name": "outlet_left", "type": "anything", "aliases": ["left", "out_0"] },
+        "1": { "name": "outlet_right", "type": "anything", "aliases": ["right", "out_1"] }
       }
     },
     "loadmess": {
@@ -510,6 +547,159 @@
         "0": { "name": "pairs_list", "type": "list", "format": "[i, partner, ...]" },
         "1": { "name": "fixed_points", "type": "list", "format": "[fixed_note...]" },
         "2": { "name": "symmetry_count", "type": "int" }
+      }
+    },
+    "metro": {
+      "inlets": {
+        "0": { "name": "toggle_on_off", "type": "int/bang", "aliases": ["toggle", "enable"] },
+        "1": { "name": "interval_ms", "type": "float/int", "aliases": ["time", "interval"] }
+      },
+      "outlets": {
+        "0": { "name": "ticks", "type": "bang", "aliases": ["bang", "output"] }
+      }
+    },
+    "toggle": {
+      "inlets": {
+        "0": { "name": "state_or_bang", "type": "int/bang", "aliases": ["input"] }
+      },
+      "outlets": {
+        "0": { "name": "state", "type": "int", "aliases": ["value", "output"] }
+      }
+    },
+    "button": {
+      "inlets": {
+        "0": { "name": "trigger_bang", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": {
+        "0": { "name": "bang_out", "type": "bang", "aliases": ["output", "bang"] }
+      }
+    },
+    "select": {
+      "inlets": {
+        "0": { "name": "input_value", "type": "anything", "aliases": ["input"] },
+        "1": { "name": "compare_value", "type": "anything", "aliases": ["compare"] }
+      },
+      "outlets": {
+        "0": { "name": "match_bang", "type": "bang", "aliases": ["match"] },
+        "1": { "name": "nomatch_value", "type": "anything", "aliases": ["nomatch", "unmatched"] }
+      }
+    },
+    "gate": {
+      "inlets": {
+        "0": { "name": "open_close_or_outlet_select", "type": "int", "aliases": ["control", "select"] },
+        "1": { "name": "input_message", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": {
+        "0": { "name": "routed_output", "type": "anything", "aliases": ["output"] }
+      }
+    },
+    "snapshot~": {
+      "inlets": {
+        "0": { "name": "signal_in", "type": "signal", "aliases": ["signal"] },
+        "1": { "name": "trigger_sample", "type": "bang", "aliases": ["sample", "trigger"] }
+      },
+      "outlets": {
+        "0": { "name": "sampled_float", "type": "float", "aliases": ["value", "output"] }
+      }
+    },
+    "print": {
+      "inlets": {
+        "0": { "name": "message_to_print", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": []
+    },
+    "send": {
+      "inlets": {
+        "0": { "name": "message_to_send", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": []
+    },
+    "s": {
+      "inlets": {
+        "0": { "name": "message_to_send", "type": "anything", "aliases": ["input"] }
+      },
+      "outlets": []
+    },
+    "receive": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "received_message", "type": "anything", "aliases": ["output"] }
+      }
+    },
+    "inlet": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "control_from_parent", "type": "anything" }
+      }
+    },
+    "outlet": {
+      "inlets": {
+        "0": { "name": "control_to_parent", "type": "anything" }
+      },
+      "outlets": []
+    },
+    "inlet~": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "signal_from_parent", "type": "signal" }
+      }
+    },
+    "outlet~": {
+      "inlets": {
+        "0": { "name": "signal_to_parent", "type": "signal" }
+      },
+      "outlets": []
+    },
+    "loadbang": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "bang_on_load", "type": "bang" }
+      }
+    },
+    "midiout": {
+      "inlets": {
+        "0": { "name": "raw_midi_bytes", "type": "int" },
+        "1": { "name": "port_number", "type": "int" }
+      },
+      "outlets": []
+    },
+    "sprintf": {
+      "inlets": {
+        "0": { "name": "format_input_0", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "formatted_string", "type": "symbol" }
+      }
+    },
+    "udpreceive": {
+      "inlets": {
+        "0": { "name": "port_or_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "received_data", "type": "anything" },
+        "1": { "name": "sender_info", "type": "list" }
+      }
+    },
+    "udpsend": {
+      "inlets": {
+        "0": { "name": "data_to_send", "type": "anything" },
+        "1": { "name": "host_port", "type": "anything" }
+      },
+      "outlets": []
+    },
+    "jweb": {
+      "inlets": {
+        "0": { "name": "url_or_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "js_callback", "type": "anything" },
+        "1": { "name": "loaded_bang", "type": "bang" }
+      }
+    },
+    "r": {
+      "inlets": [],
+      "outlets": {
+        "0": { "name": "received_message", "type": "anything", "aliases": ["output"] }
       }
     }
   }

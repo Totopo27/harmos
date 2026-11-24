@@ -4,6 +4,7 @@ Verifica compilación nativa, ejecución aislada y evaluación semántica contra
 """
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,7 +16,11 @@ from core.compiler.cpp_headless_runner import (
     find_cpp_compiler,
     compile_cpp_executable,
     generate_cpp_harness,
-    run_headless_cases
+    run_headless_cases,
+    parse_headless_output,
+    evaluate_headless_cases,
+    register_kernel_generator,
+    _KERNEL_GENERATORS,
 )
 
 
@@ -30,8 +35,8 @@ class TestCppHeadlessRunner(unittest.TestCase):
 
     def test_find_cpp_compiler(self):
         compiler = find_cpp_compiler()
-        # En el entorno host detectamos g++ o clang++
-        self.assertIsNotNone(compiler)
+        if not compiler:
+            self.skipTest("Compilador C++ no disponible en este entorno host")
         self.assertIn(compiler, ["g++", "clang++", "cl"])
 
     def test_compile_cpp_executable_minimal(self):
@@ -187,6 +192,90 @@ class TestCppHeadlessRunner(unittest.TestCase):
         report = run_headless_cases("non_existent_kernel.hpp", cases)
         self.assertEqual(report.verdict, "FAIL")
         self.assertIn("no encontrado", report.details[0])
+
+    def test_parse_headless_output_valid_and_malformed(self):
+        stdout = (
+            '{"id": 0, "status": "ok", "actual": 1.5}\n'
+            'random debug line that is ignored\n'
+            '{"malformed_json: missing_brace\n'
+            '{"id": 1, "status": "error", "error": "std::overflow_error"}\n'
+            '{"status": "ok", "actual": 2.0}\n'  # Missing id
+        )
+        outputs, errors = parse_headless_output(stdout)
+        self.assertIn(0, outputs)
+        self.assertEqual(outputs[0]["actual"], 1.5)
+        self.assertIn(1, outputs)
+        self.assertEqual(outputs[1]["error"], "std::overflow_error")
+        self.assertEqual(len(errors), 2)  # One syntax error, one missing 'id' error
+
+    def test_evaluate_headless_cases_outcomes(self):
+        cases = [
+            TestCase(fn="test_fn", args=[1], expected=1.0, tolerance=1e-5),
+            TestCase(fn="test_fn", args=[2], expected=2.0, tolerance=1e-5),
+            TestCase(fn="test_fn", args=[3], expected=3.0, tolerance=1e-5),
+        ]
+        outputs = {
+            0: {"status": "ok", "actual": 1.0},
+            1: {"status": "ok", "actual": 99.0},  # mismatch
+            # 2 is missing
+        }
+        passed, failed, failures = evaluate_headless_cases(cases, outputs)
+        self.assertEqual(passed, 1)
+        self.assertEqual(failed, 2)
+        self.assertEqual(len(failures), 2)
+        self.assertIn("Discrepancia numerica", failures[0].reason)
+        self.assertIn("Sin salida producida", failures[1].reason)
+
+    def test_custom_kernel_generator_registration(self):
+        def custom_gen(cases, _type_name):
+            return ["    // Custom generator code"]
+
+        # Isolate the module-level registry so the custom archetype never leaks into other tests.
+        with patch.dict("core.compiler.cpp_headless_runner._KERNEL_GENERATORS"):
+            register_kernel_generator("my_custom_archetype", custom_gen)
+            cases = [TestCase(fn="foo", args=[], expected=0)]
+            code = generate_cpp_harness("dummy.hpp", cases, kernel_class="my_custom_archetype")
+            self.assertIn("// Custom generator code", code)
+        self.assertNotIn("my_custom_archetype", _KERNEL_GENERATORS)
+
+    def _dummy_header(self):
+        header = Path(self.temp_dir) / "dummy_kernel.hpp"
+        header.write_text("// dummy", encoding="utf-8")
+        return header
+
+    def test_compile_cpp_executable_rejects_invalid_source(self):
+        if not self.compiler:
+            self.skipTest("Compilador C++ no disponible")
+        src = Path(self.temp_dir) / "broken.cpp"
+        exe = Path(self.temp_dir) / ("broken.exe" if os.name == "nt" else "broken")
+        src.write_text("int main( { return 0; }", encoding="utf-8")
+        ok, msg = compile_cpp_executable(src, exe, compiler_path=self.compiler)
+        self.assertFalse(ok)
+        self.assertTrue(msg)
+        self.assertFalse(exe.exists())
+
+    def test_run_headless_fail_on_compilation_error(self):
+        cases = [TestCase(fn="dummy", args=[1.0], expected=1.0, tolerance=1e-7)]
+        with patch("core.compiler.cpp_headless_runner.find_cpp_compiler", return_value="g++"), \
+                patch("core.compiler.cpp_headless_runner.compile_cpp_executable",
+                      return_value=(False, "error: expected ';'")):
+            report = run_headless_cases(self._dummy_header(), cases)
+        self.assertEqual(report.verdict, "FAIL")
+        self.assertEqual(report.passed_cases, 0)
+        self.assertEqual(report.failed_cases, 1)
+        self.assertIn("Fallo de compilacion", report.details[0])
+        self.assertIn("expected ';'", report.details[0])
+
+    def test_run_headless_fail_on_execution_timeout(self):
+        cases = [TestCase(fn="dummy", args=[1.0], expected=1.0, tolerance=1e-7)]
+        timeout = subprocess.TimeoutExpired(cmd="harness", timeout=0.5)
+        with patch("core.compiler.cpp_headless_runner.find_cpp_compiler", return_value="g++"), \
+                patch("core.compiler.cpp_headless_runner.compile_cpp_executable", return_value=(True, "")), \
+                patch("core.compiler.cpp_headless_runner.subprocess.run", side_effect=timeout):
+            report = run_headless_cases(self._dummy_header(), cases, timeout_sec=0.5)
+        self.assertEqual(report.verdict, "FAIL")
+        self.assertEqual(report.failed_cases, 1)
+        self.assertIn("Timeout (0.5s)", report.details[0])
 
 
 if __name__ == "__main__":
