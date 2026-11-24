@@ -28,6 +28,9 @@ class TestMaxrefGenerator(unittest.TestCase):
         self.assertEqual(escape_xml("a < b & c > d"), "a &lt; b &amp; c &gt; d")
         self.assertEqual(escape_xml(None), "")
         self.assertEqual(escape_xml(42), "42")
+        # Attributes are emitted single-quoted, so both quote kinds must be escaped.
+        self.assertEqual(escape_xml("it's \"x\""), "it&apos;s &quot;x&quot;")
+        ET.fromstring(f"<c74object name='{escape_xml(chr(39) + 'quoted' + chr(34))}'/>")
 
     def test_map_ir_attr_type_to_c74(self):
         self.assertEqual(map_ir_attr_type_to_c74("float"), "float64")

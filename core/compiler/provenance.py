@@ -14,7 +14,8 @@ HARMOS_VERSION = "0.2.0"
 
 TEXT_EXTENSIONS = {
     ".json", ".maxpat", ".cpp", ".hpp", ".h", ".c", ".txt", ".cmake",
-    ".py", ".md", ".xml", ".sc", ".scd", ".yml", ".yaml"
+    ".py", ".md", ".xml", ".sc", ".scd", ".yml", ".yaml",
+    ".ts", ".js", ".tsx", ".jsx"
 }
 
 

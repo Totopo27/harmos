@@ -65,17 +65,24 @@ def _extract_from_class(
     messages: List[Dict[str, Any]] = []
     category = "control"
 
+    _CONTROL_FLOW_KEYWORDS = frozenset({
+        "if", "else", "while", "for", "switch", "catch", "try", "finally",
+        "function", "return", "throw", "new", "delete", "typeof",
+        "instanceof", "class", "import", "export", "default", "break", "continue",
+    })
+
     all_methods = re.findall(r"(\w+)\s*\((.*?)\)(?:\s*:\s*([\w\[\]]+))?\s*\{", source_code)
+    callable_methods = [m for m in all_methods if m[0] not in _CONTROL_FLOW_KEYWORDS]
     primary_method = None
 
-    for m_name, m_params, m_return in all_methods:
+    for m_name, m_params, m_return in callable_methods:
         if m_name in ["process", "compute", "calculate", "run", "step"]:
             primary_method = (m_name, m_params, m_return)
             break
 
-    if not primary_method and all_methods:
-        non_ctor = [m for m in all_methods if m[0] != "constructor"]
-        primary_method = non_ctor[0] if non_ctor else all_methods[0]
+    if not primary_method and callable_methods:
+        non_ctor = [m for m in callable_methods if m[0] != "constructor"]
+        primary_method = non_ctor[0] if non_ctor else callable_methods[0]
 
     if primary_method:
         m_name, m_params, m_return = primary_method
@@ -92,7 +99,7 @@ def _extract_from_class(
             category = "dsp"
 
     # Métodos mutadores o secundarios se registran como messages
-    for m_name, m_params, _ in all_methods:
+    for m_name, m_params, _ in callable_methods:
         if primary_method and m_name == primary_method[0]:
             continue
         if m_name != "constructor":
@@ -102,7 +109,15 @@ def _extract_from_class(
             })
 
     # Extraer atributos/propiedades de la clase (ej: gain: number = 1.0;)
-    props = re.findall(r"(\w+)\s*:\s*(\w+)(?:\s*=\s*([^;]+))?;", source_code)
+    # Restrict to class header before the first method (including constructor) to skip local vars.
+    first_method_pos = None
+    for m in re.finditer(r"(\w+)\s*\(.*?\)(?:\s*:\s*[\w\[\]]+)?\s*\{", source_code):
+        name = m.group(1)
+        if name and name not in _CONTROL_FLOW_KEYWORDS:
+            first_method_pos = m.start()
+            break
+    class_header = source_code[:first_method_pos] if first_method_pos is not None else source_code
+    props = re.findall(r"(\w+)\s*:\s*(\w+)(?:\s*=\s*([^;]+))?;", class_header)
     for p_name, p_type, p_def in props:
         max_attr_type = "float" if p_type == "number" else "symbol"
         default_val = 0.0

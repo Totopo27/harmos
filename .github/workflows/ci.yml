@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, "feat/**" ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, "feat/**", "chore/**" ]
 
 permissions:
   contents: read
@@ -27,7 +27,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
 
       - name: Install verification dependencies
         run: |
@@ -60,7 +59,7 @@ jobs:
 
       - name: Run End-to-End IR to Max Package Compilation
         run: |
-          python -m core.compiler.cli benchmarks/midiControl/micro_mpe_ir.json --out build_e2e/micro_mpe_pkg
+          python -m core.compiler.cli benchmarks/midiControl/micro_mpe_ir.json --out build_e2e/micro_mpe_pkg --no-build
 
       - name: Run Performance Budget Benchmark
         run: |

@@ -3,8 +3,8 @@ Harmos TypedPatch: Compilador de parches de Max MSP (.maxpat) con validación es
 Genera el árbol JSON nativo de Cycling '74 sin cables hardcodeados a ciegas.
 """
 import json
-from typing import Dict, Any, List, Optional
-from core.compiler.contract_engine import ContractEngine, IncompatibleConnectionError
+from typing import Dict, Any, List, Optional, Union
+from core.compiler.contract_engine import ContractEngine
 
 
 class MaxBox:
