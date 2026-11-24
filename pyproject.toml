@@ -15,7 +15,7 @@ dev = [
 
 [tool.ruff]
 target-version = "py311"
-src = ["core", "scripts", "tests"]
+src = ["core", "scripts", "benchmarks", "tests"]
 extend-exclude = ["c74support", "build", "build_e2e", "build_harmos"]
 
 [tool.ruff.lint]
