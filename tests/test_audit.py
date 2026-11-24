@@ -8,6 +8,8 @@ veredicto: una sesion vacia o sin fin de carga nunca puede producir PASS.
 import unittest
 import json
 import os
+import signal
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -694,6 +696,79 @@ class TestStaticGateOrdering(unittest.TestCase):
         self.assertEqual("BLOCKED", verdict)
         self.assertTrue(any("Max.exe no fue detectado" in d for d in details), details)
         self.assertTrue(any("MAX_PATH" in d for d in details), details)
+
+
+class TestResolveMaxExecutable(unittest.TestCase):
+    """Pruebas contra archivos ejecutables reales en disco para resolve_max_executable."""
+
+    def test_resolves_real_file_via_max_path_and_skips_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_exe = Path(tmp) / "Max.exe"
+            with mock.patch.dict(audit.os.environ, {"MAX_PATH": str(fake_exe)}, clear=True), \
+                    mock.patch.object(audit.sys, "platform", "linux"):
+                self.assertIsNone(audit.resolve_max_executable())
+                fake_exe.write_bytes(b"")
+                self.assertEqual(fake_exe, audit.resolve_max_executable())
+
+    def test_windows_discovers_real_file_in_program_w6432(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "Cycling '74" / "Max 9" / "Max.exe"
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_bytes(b"")
+            with mock.patch.object(audit.sys, "platform", "win32"), \
+                    mock.patch.dict(audit.sys.modules, {"winreg": None}), \
+                    mock.patch.dict(audit.os.environ, {"ProgramW6432": tmp, "SystemDrive": tmp}, clear=True):
+                self.assertEqual(exe, audit.resolve_max_executable())
+
+    def test_darwin_discovers_real_bundle_in_user_applications(self):
+        if Path("/Applications/Max 9.app/Contents/MacOS/Max").is_file():
+            self.skipTest("System Max 9.app present")
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            exe = home / "Applications" / "Max 9.app" / "Contents" / "MacOS" / "Max"
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_bytes(b"")
+            with mock.patch.object(audit.sys, "platform", "darwin"), \
+                    mock.patch.dict(audit.os.environ, {}, clear=True), \
+                    mock.patch.object(audit.Path, "home", return_value=home):
+                self.assertEqual(exe, audit.resolve_max_executable())
+
+
+class TestProcessGroupCleanup(LogFixtureMixin, unittest.TestCase):
+    def test_posix_uses_new_session_and_kills_process_group(self):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".maxpat", delete=False, encoding="utf-8")
+        handle.write("{}")
+        handle.close()
+        patcher = Path(handle.name)
+        self.addCleanup(lambda: patcher.unlink() if patcher.exists() else None)
+        log = self.make_log(_session())
+
+        captured = {}
+        proc = mock.MagicMock()
+        proc.pid = 98765
+        proc.poll.return_value = None
+        proc.wait.side_effect = [subprocess.TimeoutExpired(cmd="Max", timeout=3), 0]
+
+        def fake_popen(*args, **kwargs):
+            captured.update(kwargs)
+            return proc
+
+        killpg_mock = mock.MagicMock()
+        with mock.patch.object(audit.sys, "platform", "linux"), \
+                mock.patch.object(audit.os, "killpg", killpg_mock, create=True), \
+                mock.patch.object(audit.signal, "SIGKILL", 9, create=True), \
+                mock.patch.object(audit, "resolve_max_executable", return_value=Path("/usr/bin/max")), \
+                mock.patch.object(audit, "resolve_max_log_path", return_value=log), \
+                mock.patch.object(audit, "SETTLE_SECONDS", 0.01), \
+                mock.patch.object(audit.subprocess, "Popen", side_effect=fake_popen):
+            verdict, _ = audit_patcher_live(patcher, timeout_seconds=2)
+
+        self.assertEqual("PASS", verdict)
+        self.assertTrue(captured.get("start_new_session"))
+        self.assertEqual(
+            killpg_mock.call_args_list,
+            [mock.call(98765, signal.SIGTERM), mock.call(98765, 9)],
+        )
 
 
 if __name__ == "__main__":

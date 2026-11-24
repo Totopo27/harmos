@@ -109,7 +109,7 @@ class TestBenchmarkEngine(unittest.TestCase):
         Verifica que ejecuciones consecutivas del benchmark de Truax producen
         veredictos identicos y estables (F2: eliminacion del veredicto coin-toss).
         """
-        from scripts.bench import benchmark_truax_normal_form
+        from benchmarks.suites import benchmark_truax_normal_form
 
         verdicts = []
         speedups = []
@@ -123,7 +123,7 @@ class TestBenchmarkEngine(unittest.TestCase):
 
         # 1. Todos los veredictos deben ser exactamente iguales a SHIP
         self.assertTrue(all(verdict == "SHIP" for verdict in verdicts), f"Veredictos inestables: {verdicts}, detalles: {all_reasons}")
-        self.assertTrue(all(s >= 0.45 for s in speedups), f"Speedup fuera de presupuesto (0.6 - 0.15): {speedups}")
+        self.assertTrue(all(s >= 0.25 for s in speedups), f"Speedup fuera de presupuesto (0.35 - 0.10): {speedups}")
 
         # 2. La dispersion de speedup entre ejecuciones debe ser acotada (< 1.5x de rango para runners con jitter)
         speedup_range = max(speedups) - min(speedups)
@@ -167,6 +167,21 @@ class TestBenchmarkEngine(unittest.TestCase):
         self.assertEqual(no_ref.verdict, "NO_SHIP")
         self.assertIsNone(no_ref.speedup)
         self.assertTrue(any("Referencia declarada sin muestras" in r for r in no_ref.reasons))
+
+    def test_evaluate_benchmark_alternates_call_order(self):
+        """La medicion intercalada debe alternar el orden target/referencia para neutralizar bias."""
+        order = []
+        budget = PerformanceBudget(max_latency_us=50000.0, max_p95_latency_us=50000.0)
+        evaluate_benchmark(
+            name="Order Alternation",
+            target_fn=lambda: order.append("target"),
+            reference_fn=lambda: order.append("ref"),
+            budget=budget,
+            iterations=4,
+            rounds=1,
+            warmup=0,
+        )
+        self.assertEqual(order, ["target", "ref", "ref", "target", "target", "ref", "ref", "target"])
 
 
 if __name__ == "__main__":

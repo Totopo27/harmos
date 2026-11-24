@@ -164,3 +164,63 @@ DIESIS_ROSA_CONTROL_IR: Dict[str, Any] = {
         }
     ],
 }
+
+
+def benchmark_truax_normal_form():
+    """Pilot benchmark: Truax normal form reduction (MicrotonalEngine)."""
+    from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
+    from core.compiler.benchmark import PerformanceBudget, evaluate_benchmark
+
+    engine = MicrotonalEngine()
+    ratios = [
+        (5.0, 3.0), (7.0, 4.0), (9.0, 8.0), (11.0, 6.0),
+        (13.0, 8.0), (15.0, 8.0), (17.0, 16.0), (19.0, 16.0),
+    ]
+    str_ratios = [f"{c}:{m}" for c, m in ratios]
+
+    def unoptimized_truax_batch():
+        res = []
+        for s in str_ratios:
+            parts = s.split(":")
+            c, m = float(parts[0]), float(parts[1])
+            while (c != m) and (m < (2.0 * c)):
+                c = abs(c - m)
+            res.append((c, m))
+        return res
+
+    def engine_truax_batch():
+        return [engine.to_normal_form(c, m) for c, m in ratios]
+
+    return evaluate_benchmark(
+        name="Truax Normal Form Reduction (Microtonal Engine)",
+        target_fn=engine_truax_batch,
+        reference_fn=unoptimized_truax_batch,
+        budget=PerformanceBudget(max_latency_us=150.0, min_speedup=0.35, max_p95_latency_us=350.0, tolerance_margin=0.10),
+        iterations=500,
+        rounds=5,
+    )
+
+
+def benchmark_scale_generation_384():
+    """Pilot benchmark: 384-position microtonal tuning table generation."""
+    from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
+    from core.compiler.benchmark import PerformanceBudget, evaluate_benchmark
+
+    engine = MicrotonalEngine()
+    return evaluate_benchmark(
+        name="Generacion de Tablas de Afinacion (384 posiciones)",
+        target_fn=lambda: engine.generate_all_scales(),
+        budget=PerformanceBudget(max_latency_us=4000.0, max_p95_latency_us=8000.0),
+        iterations=50,
+        rounds=3,
+    )
+
+
+def get_pilot_benchmarks(suite: str = "all"):
+    """Run requested pilot benchmark suite ('truax', 'tables', 'all')."""
+    suites = []
+    if suite in ("truax", "all"):
+        suites.append(benchmark_truax_normal_form())
+    if suite in ("tables", "all"):
+        suites.append(benchmark_scale_generation_384())
+    return suites

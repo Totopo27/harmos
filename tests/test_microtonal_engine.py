@@ -71,6 +71,20 @@ class TestMicrotonalEngine(unittest.TestCase):
         self.assertIn("function calcCarrierFreq", js_code)
         self.assertIn("outlet(0", js_code)
 
+    def test_adr0001_no_domain_benchmarks_in_core(self):
+        """ADR-0001: core/compiler/ debe permanecer libre de motores y suites piloto."""
+        compiler_dir = Path("core/compiler")
+        self.assertFalse((compiler_dir / "microtonal_engine.py").exists())
+        self.assertFalse((compiler_dir / "truax_kernel.hpp").exists())
+        forbidden = (
+            "MicrotonalEngine", "WilsonKernel", "HexsliderKernel",
+            "TruaxKernel", "diesisRosa", "tet31.txt", "truax.js",
+        )
+        for py_file in compiler_dir.glob("*.py"):
+            text = py_file.read_text(encoding="utf-8")
+            for token in forbidden:
+                self.assertNotIn(token, text, f"{py_file} contains domain reference {token!r}")
+
 
 if __name__ == "__main__":
     unittest.main()
