@@ -18,11 +18,13 @@ if str(ROOT_DIR) not in sys.path:
 import argparse
 import json
 from dataclasses import asdict
+from benchmarks.suites import (
+    benchmark_truax_normal_form,
+    benchmark_scale_generation_384,
+)
 from core.compiler.benchmark import (
     get_standard_benchmarks,
     format_benchmark_report,
-    benchmark_truax_normal_form,
-    benchmark_scale_generation_384,
 )
 
 

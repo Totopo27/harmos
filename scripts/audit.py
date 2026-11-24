@@ -30,6 +30,7 @@ import sys
 import os
 import re
 import json
+import signal
 import time
 import argparse
 import subprocess
@@ -481,6 +482,44 @@ def evaluate_session(lines: List[str]) -> Tuple[str, List[str]]:
     return "PASS", details
 
 
+def _terminate_process_tree(proc: Any) -> None:
+    """Termina el proceso lanzado y su grupo/arbol completo en Windows y POSIX."""
+    pid = getattr(proc, "pid", None)
+    if sys.platform == "win32":
+        if isinstance(pid, int) and pid > 0:
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass
+    elif hasattr(os, "killpg") and isinstance(pid, int) and pid > 0:
+        try:
+            os.killpg(pid, signal.SIGTERM)
+            proc.wait(timeout=3)
+            return
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+                proc.wait(timeout=1)
+                return
+            except (OSError, subprocess.SubprocessError):
+                pass
+        except (ProcessLookupError, OSError):
+            pass
+
+    try:
+        proc.terminate()
+        proc.wait(timeout=3)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
 def audit_patcher_live(
     patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     *, ir_path: Optional[Path] = None,
@@ -573,7 +612,10 @@ def audit_patcher_live(
 
     launched_after = time.time()
     try:
-        proc = subprocess.Popen([str(max_exe), str(patcher_path)])
+        proc = subprocess.Popen(
+            [str(max_exe), str(patcher_path)],
+            start_new_session=(sys.platform != "win32"),
+        )
     except Exception as e:
         return "FAIL", [f"Error al iniciar Max.exe: {e}"]
 
@@ -598,24 +640,8 @@ def audit_patcher_live(
                 session_lines = load_session_lines(max_log, launched_after) or session_lines
                 break
     finally:
-        # Cerrar el proceso y su arbol completo para no dejar procesos huerfanos.
-        if sys.platform == "win32":
-            try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    capture_output=True,
-                    check=False
-                )
-            except Exception:
-                pass
-        try:
-            proc.terminate()
-            proc.wait(timeout=3)
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+        # Cerrar el proceso y su arbol/grupo para no dejar procesos huerfanos.
+        _terminate_process_tree(proc)
 
     if not session_lines:
         return "BLOCKED", [

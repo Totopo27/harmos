@@ -119,15 +119,24 @@ def _collect_round_latencies(
         round_ref: List[float] = []
 
         if reference_fn:
-            # Medición intercalada para neutralizar throttling térmico y bias de scheduler
-            for _ in range(iterations):
-                t0 = time.perf_counter_ns()
-                target_fn()
-                t1 = time.perf_counter_ns()
-                reference_fn()
-                t2 = time.perf_counter_ns()
-                round_target.append((t1 - t0) / 1000.0)
-                round_ref.append((t2 - t1) / 1000.0)
+            # Alterna el orden por iteracion para neutralizar sesgo de cache y predictor
+            for i in range(iterations):
+                if i % 2 == 0:
+                    t0 = time.perf_counter_ns()
+                    target_fn()
+                    t1 = time.perf_counter_ns()
+                    reference_fn()
+                    t2 = time.perf_counter_ns()
+                    round_target.append((t1 - t0) / 1000.0)
+                    round_ref.append((t2 - t1) / 1000.0)
+                else:
+                    t0 = time.perf_counter_ns()
+                    reference_fn()
+                    t1 = time.perf_counter_ns()
+                    target_fn()
+                    t2 = time.perf_counter_ns()
+                    round_ref.append((t1 - t0) / 1000.0)
+                    round_target.append((t2 - t1) / 1000.0)
 
             med_target = statistics.median(round_target)
             med_ref = statistics.median(round_ref)
@@ -319,63 +328,8 @@ def format_benchmark_report(verdicts: List[BenchmarkVerdict]) -> str:
     return "\n".join(lines)
 
 
-def benchmark_truax_normal_form() -> BenchmarkVerdict:
-    """Benchmark estandar: reduccion a forma normal de Truax (MicrotonalEngine)."""
-    from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
-
-    engine = MicrotonalEngine()
-
-    ratios = [
-        (5.0, 3.0), (7.0, 4.0), (9.0, 8.0), (11.0, 6.0),
-        (13.0, 8.0), (15.0, 8.0), (17.0, 16.0), (19.0, 16.0)
-    ]
-    str_ratios = [f"{c}:{m}" for c, m in ratios]
-
-    def unoptimized_truax_batch():
-        res = []
-        for s in str_ratios:
-            parts = s.split(":")
-            c, m = float(parts[0]), float(parts[1])
-            while (c != m) and (m < (2.0 * c)):
-                c = abs(c - m)
-            res.append((c, m))
-        return res
-
-    def engine_truax_batch():
-        res = []
-        for c, m in ratios:
-            res.append(engine.to_normal_form(c, m))
-        return res
-
-    return evaluate_benchmark(
-        name="Truax Normal Form Reduction (Microtonal Engine)",
-        target_fn=engine_truax_batch,
-        reference_fn=unoptimized_truax_batch,
-        budget=PerformanceBudget(max_latency_us=100.0, min_speedup=0.6, max_p95_latency_us=250.0, tolerance_margin=0.15),
-        iterations=500,
-        rounds=5
-    )
-
-
-def benchmark_scale_generation_384() -> BenchmarkVerdict:
-    """Benchmark estandar: generacion de tablas de afinacion de 384 posiciones."""
-    from benchmarks.truax_fm.microtonal_engine import MicrotonalEngine
-
-    engine = MicrotonalEngine()
-    return evaluate_benchmark(
-        name="Generacion de Tablas de Afinacion (384 posiciones)",
-        target_fn=lambda: engine.generate_all_scales(),
-        budget=PerformanceBudget(max_latency_us=4000.0, max_p95_latency_us=8000.0),
-        iterations=50,
-        rounds=3
-    )
-
-
 def get_standard_benchmarks(suite: str = "all") -> List[BenchmarkVerdict]:
-    """Ejecuta y compila la suite de benchmarks solicitada ('truax', 'tables', 'all')."""
-    suites = []
-    if suite in ["truax", "all"]:
-        suites.append(benchmark_truax_normal_form())
-    if suite in ["tables", "all"]:
-        suites.append(benchmark_scale_generation_384())
-    return suites
+    """Ejecuta las suites piloto registradas en `benchmarks.suites` ('truax', 'tables', 'all')."""
+    from benchmarks.suites import get_pilot_benchmarks
+
+    return get_pilot_benchmarks(suite)
