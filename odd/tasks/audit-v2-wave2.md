@@ -24,7 +24,7 @@
 ## Tasks
 
 - [x] T1 (S1 partial: `5.2`, `5.3`, `5.4a`) [inline -> `feat/audit-v2-w2-01-domain-separation`]: Move `microtonal_engine.py` & `truax_kernel.hpp` to `benchmarks/truax_fm/`, extract CLI/headless pilot logic to `benchmarks/suites.py`, update Ruff CI/config. Verified: ruff/check.py PASS, bench.py SHIP.
-- [ ] T2 (S2–S5: `1.3`, `1.4`, `2.5`, `3.7`, `3.8`, `5.5`) [inline -> `feat/audit-v2-w2-02-poly-and-sc-voice`]: Dynamic `poly~`, `message` contract resolution, `SCVoiceCompiler` semantic wiring & domain decoupling, E2E SC test.
+- [x] T2 (S2–S5: `1.3`, `1.4`, `2.5`, `3.7`, `3.8`, `5.5`) [inline -> `feat/audit-v2-w2-02-poly-and-sc-voice`]: Dynamic `poly~`, `message` contract resolution, `SCVoiceCompiler` semantic wiring & domain decoupling, E2E SC test. Verified: ruff/check.py PASS.
 - [ ] T3 (S1 finish `5.4b`, S6, S7: `3.2`, `4.9`, `4.11`) [inline -> `feat/audit-v2-w2-03-runtime-and-bench`]: Extract pilot benchmarks out of `benchmark.py`, ADR-0001 boundary test, POSIX `killpg`, `resolve_max_executable` disk tests, benchmark order alternation.
 - [ ] T4 (S8–S9: `5.1`, `5.17`) [inline -> `chore/audit-v2-w2-04-license-and-templates`]: Full Apache-2.0 `LICENSE` and GitHub PR/Issue templates.
 - [ ] T5 (S10–S12: `5.10`, `5.11`, `5.13`–`5.16`) [inline -> `chore/audit-v2-w2-05-adrs-and-skills-sync`]: ADRs 0012–0015, docs/skills sync, ODD reconciliation.

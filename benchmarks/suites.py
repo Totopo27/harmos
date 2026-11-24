@@ -143,3 +143,24 @@ def register_pilot_kernels() -> None:
     register_kernel_generator("wilson", _generate_wilson_kernel)
     register_kernel_generator("hexslider", _generate_hexslider_kernel)
     register_kernel_generator("truax", _generate_truax_kernel)
+
+
+DIESIS_ROSA_CONTROL_IR: Dict[str, Any] = {
+    "category": "control",
+    "script_file": "truax.js",
+    "data_tables": [
+        {"name": "tet31", "type": "coll", "source_file": "tet31.txt"},
+    ],
+    "control_interfaces": [
+        {
+            "name": "scale_selector",
+            "ui_type": "umenu",
+            "target_table": "tuning_coll",
+            "options": [
+                "tet12.txt", "tet31.txt", "tet41.txt", "tet53.txt",
+                "meantone31.txt", "magic41.txt", "partch.txt", "centaur.txt",
+            ],
+            "default": "tet31.txt",
+        }
+    ],
+}
