@@ -9,8 +9,12 @@ Cubre:
 - Validación con allow_unverifiable.
 - Normalización y robustez de tipos de puerto.
 """
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from core.compiler.contract_engine import ContractEngine, IncompatibleConnectionError, ConnectionAssessment
+from scripts.audit import assess_patcher_contracts
 
 
 class TestContractEngine(unittest.TestCase):
@@ -248,6 +252,64 @@ class TestContractEngine(unittest.TestCase):
             }
         )
         self.assertEqual(ov.assess_connection("cycle~", 0, "poly~ voiceA 4", 0).status, "INVALID")
+
+    def test_node_script_contract_matches_max9_refpage(self):
+        inlets = self.engine.get_inlets("node.script")
+        outlets = self.engine.get_outlets("node.script")
+        self.assertEqual([p["type"] for p in inlets], ["anything"])
+        self.assertEqual([p["type"] for p in outlets], ["anything", "anything"])
+
+        self.assertEqual(self.engine.assess_connection("node.script", 0, "js", 0).status, "VALID")
+        self.assertEqual(self.engine.assess_connection("js", 0, "node.script", 0).status, "VALID")
+        self.assertEqual(self.engine.assess_connection("cycle~", 0, "node.script", 0).status, "INVALID")
+        self.assertEqual(self.engine.assess_connection("message", 0, "node.script", 1).status, "INVALID")
+        self.assertEqual(self.engine.assess_connection("node.script", 2, "js", 0).status, "INVALID")
+
+    def test_dict_contract_matches_max9_refpage(self):
+        inlets = self.engine.get_inlets("dict")
+        outlets = self.engine.get_outlets("dict")
+        self.assertEqual([p["type"] for p in inlets], ["anything", "anything"])
+        self.assertEqual(
+            [p["type"] for p in outlets],
+            [
+                "anything",
+                "anything",
+                ["list", "int", "symbol"],
+                ["list", "symbol"],
+                "anything",
+            ],
+        )
+
+        self.assertEqual(self.engine.assess_connection("message", 0, "dict", 0).status, "VALID")
+        self.assertEqual(self.engine.assess_connection("cycle~", 0, "dict", 0).status, "INVALID")
+        self.assertEqual(self.engine.assess_connection("message", 0, "dict", 2).status, "INVALID")
+        self.assertEqual(self.engine.assess_connection("dict", 5, "print", 0).status, "INVALID")
+
+    def test_live_bridge_host_patcher_contracts_all_verifiable(self):
+        patch_doc = {
+            "patcher": {
+                "boxes": [
+                    {"box": {"id": "obj-node", "maxclass": "newobj", "text": "node.script harmos_live_receiver.js @autostart 1"}},
+                    {"box": {"id": "obj-js", "maxclass": "newobj", "text": "js harmos_live_patch.js"}},
+                    {"box": {"id": "obj-lb", "maxclass": "newobj", "text": "loadbang"}},
+                    {"box": {"id": "obj-msg", "maxclass": "message", "text": "set key1 42"}},
+                    {"box": {"id": "obj-dict", "maxclass": "newobj", "text": "dict harmos_test_dict"}},
+                ],
+                "lines": [
+                    {"patchline": {"source": ["obj-node", 0], "destination": ["obj-js", 0]}},
+                    {"patchline": {"source": ["obj-js", 0], "destination": ["obj-node", 0]}},
+                    {"patchline": {"source": ["obj-lb", 0], "destination": ["obj-msg", 0]}},
+                    {"patchline": {"source": ["obj-msg", 0], "destination": ["obj-dict", 0]}},
+                ],
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            patcher_path = Path(tmp) / "host.maxpat"
+            patcher_path.write_text(json.dumps(patch_doc), encoding="utf-8")
+            result = assess_patcher_contracts(patcher_path, self.engine)
+            self.assertEqual(result.violations, [])
+            self.assertEqual(result.unverifiable, [])
+            self.assertEqual(result.checked, 4)
 
 
 if __name__ == "__main__":

@@ -701,6 +701,28 @@
       "outlets": {
         "0": { "name": "received_message", "type": "anything", "aliases": ["output"] }
       }
+    },
+    "node.script": {
+      "inlets": {
+        "0": { "name": "script_or_message", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "node_outlet", "type": "anything" },
+        "1": { "name": "dump_out", "type": "anything" }
+      }
+    },
+    "dict": {
+      "inlets": {
+        "0": { "name": "dict_input_and_messages", "type": "anything" },
+        "1": { "name": "dict_clone_cold", "type": "anything" }
+      },
+      "outlets": {
+        "0": { "name": "dictionary_out", "type": "anything" },
+        "1": { "name": "key_value_out", "type": "anything" },
+        "2": { "name": "keys_or_contains_out", "type": ["list", "int", "symbol"] },
+        "3": { "name": "dict_names_out", "type": ["list", "symbol"] },
+        "4": { "name": "file_status_out", "type": "anything" }
+      }
     }
   }
 }
