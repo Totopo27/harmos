@@ -278,6 +278,28 @@ def audit_contracts(patcher_path: Path) -> Tuple[Optional[List[str]], int]:
     return issues, result.checked
 
 
+def _iter_windows_fixed_drives() -> List[Path]:
+    """Enumera unidades fijas locales montadas en Windows sin hardcodear letras."""
+    if sys.platform != "win32":
+        return []
+    try:
+        import ctypes
+        import string
+
+        kernel32 = ctypes.windll.kernel32
+        mask = int(kernel32.GetLogicalDrives())
+        drive_fixed = 3
+        drives: List[Path] = []
+        for idx, letter in enumerate(string.ascii_uppercase):
+            if mask & (1 << idx):
+                root = f"{letter}:{os.sep}"
+                if kernel32.GetDriveTypeW(root) == drive_fixed:
+                    drives.append(Path(root))
+        return drives
+    except Exception:
+        return []
+
+
 def resolve_max_executable() -> Optional[Path]:
     """Resuelve la ruta a Max.exe via variable de entorno, Registro o rutas conocidas."""
     env_path = os.environ.get("MAX_PATH")
@@ -311,22 +333,37 @@ def resolve_max_executable() -> Optional[Path]:
                     return candidate
 
     # Rutas por defecto en Windows: se recorren los directorios de programa
-    # declarados por el entorno. El codigo nunca codifica rutas absolutas de host.
-    roots = []
+    # declarados por el entorno y las unidades fijas montadas. El codigo nunca
+    # codifica rutas absolutas de host.
+    roots: List[Path] = []
+    seen_roots: set[str] = set()
+
+    def _add_root(raw_root: Optional[Any]) -> None:
+        if not raw_root:
+            return
+        root_path = Path(raw_root)
+        key = os.path.normcase(os.path.abspath(str(root_path)))
+        if key not in seen_roots:
+            seen_roots.add(key)
+            roots.append(root_path)
+
     for env_name in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
-        root = os.environ.get(env_name)
-        if root and root not in roots:
-            roots.append(root)
+        _add_root(os.environ.get(env_name))
     if sys.platform == "win32":
         sys_drive = os.environ.get("SystemDrive", "C:")
-        candidate_root = f"{sys_drive}\\Program Files"
-        if candidate_root not in roots and Path(candidate_root).is_dir():
-            roots.append(candidate_root)
+        candidate_root = Path(f"{sys_drive}\\Program Files")
+        if candidate_root.is_dir():
+            _add_root(candidate_root)
+        for drive in _iter_windows_fixed_drives():
+            for subdir in ("Program Files", "Program Files (x86)"):
+                drive_root = drive / subdir
+                if drive_root.is_dir():
+                    _add_root(drive_root)
 
     candidates = []
-    for root in roots:
-        for version in ("Max 9", "Max 8"):
-            candidate = Path(root) / "Cycling '74" / version / "Max.exe"
+    for version in ("Max 9", "Max 8"):
+        for root in roots:
+            candidate = root / "Cycling '74" / version / "Max.exe"
             if candidate not in candidates:
                 candidates.append(candidate)
     for c in candidates:

@@ -742,6 +742,41 @@ class TestResolveMaxExecutable(unittest.TestCase):
                     mock.patch.object(audit.Path, "home", return_value=home):
                 self.assertEqual(exe, audit.resolve_max_executable())
 
+    def test_windows_discovers_real_file_on_secondary_fixed_drive(self):
+        with tempfile.TemporaryDirectory() as tmp_sys, tempfile.TemporaryDirectory() as tmp_sec:
+            exe = Path(tmp_sec) / "Program Files" / "Cycling '74" / "Max 9" / "Max.exe"
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_bytes(b"")
+            with mock.patch.object(audit.sys, "platform", "win32"), \
+                    mock.patch.dict(audit.sys.modules, {"winreg": None}), \
+                    mock.patch.dict(audit.os.environ, {"SystemDrive": tmp_sys}, clear=True), \
+                    mock.patch.object(audit, "_iter_windows_fixed_drives", return_value=[Path(tmp_sec)]):
+                self.assertEqual(exe, audit.resolve_max_executable())
+
+    def test_windows_prefers_max_9_on_secondary_drive_over_max_8_on_system_drive(self):
+        with tempfile.TemporaryDirectory() as tmp_c, tempfile.TemporaryDirectory() as tmp_d:
+            max8_exe = Path(tmp_c) / "Program Files" / "Cycling '74" / "Max 8" / "Max.exe"
+            max8_exe.parent.mkdir(parents=True, exist_ok=True)
+            max8_exe.write_bytes(b"")
+
+            max9_exe = Path(tmp_d) / "Program Files" / "Cycling '74" / "Max 9" / "Max.exe"
+            max9_exe.parent.mkdir(parents=True, exist_ok=True)
+            max9_exe.write_bytes(b"")
+
+            with mock.patch.object(audit.sys, "platform", "win32"), \
+                    mock.patch.dict(audit.sys.modules, {"winreg": None}), \
+                    mock.patch.dict(
+                        audit.os.environ,
+                        {"ProgramW6432": str(Path(tmp_c) / "Program Files"), "SystemDrive": tmp_c},
+                        clear=True,
+                    ), \
+                    mock.patch.object(
+                        audit,
+                        "_iter_windows_fixed_drives",
+                        return_value=[Path(tmp_c), Path(tmp_d)],
+                    ):
+                self.assertEqual(max9_exe, audit.resolve_max_executable())
+
 
 class TestProcessGroupCleanup(LogFixtureMixin, unittest.TestCase):
     def test_posix_uses_new_session_and_kills_process_group(self):
