@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -275,6 +276,36 @@ process.on("SIGINT", () => serverHandle.close().then(() => process.exit(0)));
                         audit.main(["--patcher", str(illegal_patcher), "--live-endpoint", node_url, "--json"])
                 self.assertEqual(ctx_static.exception.code, 1)
                 self.assertEqual(json.loads(out_static.getvalue())["status"], "FAIL")
+        finally:
+            _stop_proc(proc)
+
+    def test_max_nsrunner_dynamic_import_autostarts_receiver(self):
+        env = dict(os.environ)
+        env["SCRIPT_PATH"] = str(RECEIVER_JS)
+        env["HARMOS_LIVE_PORT"] = "0"
+        proc = subprocess.Popen(
+            [NODE_BIN, "-e", 'import(require("url").pathToFileURL(process.env.SCRIPT_PATH).href)'],
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            url = _read_ready_url(proc)
+            with MaxLiveBridge(url, timeout=3.0) as bridge:
+                ping_res = bridge.ping()
+                self.assertTrue(ping_res["ok"])
+                self.assertFalse(ping_res["max_api_attached"])
+
+            with tempfile.TemporaryDirectory() as tmp:
+                valid_patcher = _write_patcher(
+                    Path(tmp) / "valid.maxpat",
+                    [_box("b1", "cycle~ 220"), _box("b2", "ezdac~")],
+                    [_line("b1", 0, "b2", 0)],
+                )
+                verdict, _ = audit.audit_patcher_live(valid_patcher, live_endpoint=url)
+                self.assertEqual(verdict, "BLOCKED")
         finally:
             _stop_proc(proc)
 

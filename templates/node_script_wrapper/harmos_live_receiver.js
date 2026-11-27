@@ -7,6 +7,7 @@
 
 const crypto = require("crypto");
 const http = require("http");
+const path = require("path");
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
@@ -472,7 +473,22 @@ function parseCliPort(argv) {
   return port;
 }
 
-if (require.main === module) {
+function isMaxHostedScript(env = process.env, currentFilename = __filename) {
+  if (!env || typeof env.SCRIPT_PATH !== "string" || !env.SCRIPT_PATH.trim()) {
+    return false;
+  }
+  const resolvedScript = path.resolve(env.SCRIPT_PATH);
+  const resolvedCurrent = path.resolve(currentFilename);
+  if (process.platform === "win32") {
+    return resolvedScript.toLowerCase() === resolvedCurrent.toLowerCase();
+  }
+  return resolvedScript === resolvedCurrent;
+}
+
+const isCliMain = require.main === module;
+const isMaxHosted = isMaxHostedScript();
+
+if (isCliMain || isMaxHosted) {
   const port = parseCliPort(process.argv.slice(2));
   const receiver = createReceiverServer({ port });
   receiver
@@ -486,11 +502,17 @@ if (require.main === module) {
     })
     .catch((err) => {
       process.stderr.write(`ERROR ${err.message}\n`);
-      process.exit(1);
+      if (isCliMain) {
+        process.exit(1);
+      }
     });
 
   const shutdown = () => {
-    receiver.close().then(() => process.exit(0));
+    receiver.close().then(() => {
+      if (isCliMain) {
+        process.exit(0);
+      }
+    });
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -504,4 +526,5 @@ module.exports = {
   createReceiverServer,
   decodeNextFrame,
   encodeFrame,
+  isMaxHostedScript,
 };
