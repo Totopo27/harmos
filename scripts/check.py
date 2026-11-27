@@ -5,6 +5,7 @@ Verifica de forma determinista antes de cada commit o PR:
 1. Suite completa de tests unitarios (tests/).
 2. Sintaxis JSON y estructura del catalogo de contratos (no JSON Schema general).
 3. Escaneo estatico de PII, rutas absolutas de host y secretos.
+4. Sincronizacion AST de skills/harmos-cli/SKILL.md.
 """
 import argparse
 import contextlib
@@ -22,6 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from core.compiler.cli_output import emit_json_envelope
 from core.compiler.contract_engine import validate_contracts
+from scripts.generate_skill import verify_skill_sync
 
 # Patrones prohibidos en archivos trackeados
 FORBIDDEN_PATTERNS = [
@@ -53,7 +55,7 @@ def _is_scanned_text(path_obj: Path) -> bool:
 
 
 def run_unit_tests() -> bool:
-    print("[1/3] Ejecutando suite de tests unitarios...")
+    print("[1/4] Ejecutando suite de tests unitarios...")
     result = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "tests"],
         cwd=_REPO_ROOT,
@@ -74,7 +76,7 @@ def validate_json_schemas(schema_dir: Path = None) -> bool:
     """Check syntax and supported catalog shape, not full Draft-07 conformance."""
     if schema_dir is None:
         schema_dir = _REPO_ROOT / "core" / "schema"
-    print("[2/3] Validando sintaxis JSON y estructura del catalogo de contratos...")
+    print("[2/4] Validando sintaxis JSON y estructura del catalogo de contratos...")
     if not schema_dir.exists():
         print("  FAIL: Directorio core/schema no encontrado.")
         return False
@@ -101,7 +103,7 @@ def validate_json_schemas(schema_dir: Path = None) -> bool:
 
 
 def scan_for_leaks_and_pii(repo_root: Path = None) -> bool:
-    print("[3/3] Escaneando arbol git en busca de PII, rutas de host o secretos...")
+    print("[3/4] Escaneando arbol git en busca de PII, rutas de host o secretos...")
     root = repo_root or _REPO_ROOT
 
     # Tracked plus untracked-but-not-ignored files: a leak must be caught before `git add`.
@@ -144,6 +146,16 @@ def scan_for_leaks_and_pii(repo_root: Path = None) -> bool:
     return False
 
 
+def verify_generated_skill(repo_root: Path = None) -> bool:
+    print("[4/4] Verificando sincronizacion AST de skills/harmos-cli/SKILL.md...")
+    root = repo_root or _REPO_ROOT
+    status, diagnostics = verify_skill_sync(repo_root=root)
+    prefix = "OK" if status == "PASS" else "FAIL"
+    for line in diagnostics:
+        print(f"  {prefix}: {line}")
+    return status == "PASS"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Harmos Pre-Commit Guardrail & Verifier")
     parser.add_argument(
@@ -164,6 +176,7 @@ def main(argv: Optional[List[str]] = None):
             ("unit_tests", run_unit_tests),
             ("json_schemas", validate_json_schemas),
             ("privacy_scan", scan_for_leaks_and_pii),
+            ("skill_sync", verify_generated_skill),
         )
         results: Dict[str, bool] = {}
         diagnostics: List[str] = []
@@ -194,9 +207,10 @@ def main(argv: Optional[List[str]] = None):
     step1 = run_unit_tests()
     step2 = validate_json_schemas()
     step3 = scan_for_leaks_and_pii()
+    step4 = verify_generated_skill()
 
     print("\n--------------------------------------------------")
-    if step1 and step2 and step3:
+    if step1 and step2 and step3 and step4:
         print("ESTADO: VERIFICACION APROBADA (PASS)")
         print("El repositorio cumple los estandares de calidad y privacidad.")
         sys.exit(0)

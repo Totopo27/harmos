@@ -18,6 +18,10 @@ This repository is governed by rigorous engineering practices, test-driven devel
 
 ## Agent skills
 
+### Harmos CLI skill
+
+The canonical CLI usage skill is auto-generated from the CLI parsers' AST at `skills/harmos-cli/SKILL.md`. Regenerate with `python scripts/generate_skill.py` and verify drift with `python scripts/generate_skill.py --check` (also enforced by `python scripts/check.py`).
+
 ### Issue tracker
 
 Issues are tracked using **GitHub Issues** at `Totopo27/harmos` via the `gh` CLI. See `docs/agents/issue-tracker.md`.

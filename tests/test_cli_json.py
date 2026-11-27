@@ -237,6 +237,7 @@ class TestCLIJsonEnvelope(unittest.TestCase):
         with mock.patch.object(check, "run_unit_tests", return_value=True), \
                 mock.patch.object(check, "validate_json_schemas", return_value=True), \
                 mock.patch.object(check, "scan_for_leaks_and_pii", return_value=True), \
+                mock.patch.object(check, "verify_generated_skill", return_value=True), \
                 contextlib.redirect_stdout(stdout_ok):
             with self.assertRaises(SystemExit) as ctx_ok:
                 check.main(["--json"])
@@ -254,6 +255,7 @@ class TestCLIJsonEnvelope(unittest.TestCase):
                 "unit_tests": True,
                 "json_schemas": True,
                 "privacy_scan": True,
+                "skill_sync": True,
             },
         )
 
@@ -265,6 +267,7 @@ class TestCLIJsonEnvelope(unittest.TestCase):
         with mock.patch.object(check, "run_unit_tests", return_value=True), \
                 mock.patch.object(check, "validate_json_schemas", return_value=True), \
                 mock.patch.object(check, "scan_for_leaks_and_pii", side_effect=_failing_privacy), \
+                mock.patch.object(check, "verify_generated_skill", return_value=True), \
                 contextlib.redirect_stdout(stdout_fail):
             with self.assertRaises(SystemExit) as ctx_fail:
                 check.main(["--json"])
@@ -283,6 +286,7 @@ class TestCLIJsonEnvelope(unittest.TestCase):
         with mock.patch.object(check, "run_unit_tests", return_value=True), \
                 mock.patch.object(check, "validate_json_schemas", return_value=True), \
                 mock.patch.object(check, "scan_for_leaks_and_pii", return_value=True), \
+                mock.patch.object(check, "verify_generated_skill", return_value=True), \
                 contextlib.redirect_stdout(stdout_plain):
             with self.assertRaises(SystemExit) as ctx_plain:
                 check.main([])
