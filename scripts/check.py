@@ -43,7 +43,7 @@ BANNED_EXTENSIONS = [".ps1", ".bat", ".cmd"]
 
 # Extensiones de texto analizadas contra fugas y PII
 SCANNED_EXTENSIONS = [
-    ".md", ".py", ".json", ".cpp", ".hpp", ".txt", ".cmake", ".yml", ".yaml",
+    ".md", ".py", ".js", ".json", ".cpp", ".hpp", ".txt", ".cmake", ".yml", ".yaml",
     ".toml", ".env", ".sh", ".xml",
 ]
 

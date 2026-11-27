@@ -70,7 +70,7 @@ class TestForbiddenPatterns(unittest.TestCase):
                 self.assertTrue(_matches(sample))
 
     def test_scanned_extensions_include_config_and_script_files(self):
-        for ext in (".toml", ".env", ".sh", ".xml"):
+        for ext in (".toml", ".env", ".sh", ".xml", ".js"):
             self.assertIn(ext, SCANNED_EXTENSIONS)
 
 
@@ -96,6 +96,19 @@ class TestUntrackedScan(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 self.assertFalse(scan_for_leaks_and_pii(root))
             self.assertIn(".env", output.getvalue())
+
+    def test_js_files_are_scanned_for_leaks_and_host_paths(self):
+        if shutil.which("git") is None:
+            self.skipTest("git no disponible")
+        secret = "ghp" + "_" + "y" * 24
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._git(root, "init", "-q")
+            (root / "bridge.js").write_text(f'const token = "{secret}";\n', encoding="utf-8")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertFalse(scan_for_leaks_and_pii(root))
+            self.assertIn("bridge.js", output.getvalue())
 
 class TestContractStructureCheck(unittest.TestCase):
     def test_parseable_json_is_not_sufficient_contract_evidence(self):

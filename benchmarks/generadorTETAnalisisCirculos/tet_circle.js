@@ -328,7 +328,13 @@ function ondrag(x, y, button) {
  */
 function export_svg(filePath) {
     if (!filePath) {
-        filePath = "D:/DocumentosDiscoD/OptimizandoParaMaxSDK/benchmarks/generadorTETAnalisisCirculos/" + divisions + "-TET-inversion-" + indexSum + ".svg";
+        var defaultName = divisions + "-TET-inversion-" + indexSum + ".svg";
+        if (typeof this !== "undefined" && this.patcher && this.patcher.filepath) {
+            var baseDir = this.patcher.filepath.replace(/[\\/][^\\/]+$/, "");
+            filePath = baseDir + "/" + defaultName;
+        } else {
+            filePath = defaultName;
+        }
     }
 
     var inv = getInversionPairs(divisions, indexSum);
