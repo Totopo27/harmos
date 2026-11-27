@@ -47,7 +47,7 @@ Root options: `--json`
 
 ### `python scripts/audit.py` (`scripts/audit.py`)
 
-Root options: `--patcher*`, `--ir`, `--timeout (default: 60)`, `--json`
+Root options: `--patcher*`, `--ir`, `--timeout (default: 60)`, `--live-endpoint`, `--json`
 
 ### `python scripts/check.py` (`scripts/check.py`)
 

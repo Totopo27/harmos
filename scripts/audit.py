@@ -38,7 +38,7 @@ import io
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any, NamedTuple
+from typing import Optional, Tuple, List, Dict, Any, NamedTuple, Sequence
 
 # El script se ejecuta como `python scripts/audit.py`: la raiz del repo debe estar
 # en sys.path para importar el motor de procedencia.
@@ -49,6 +49,7 @@ if str(_REPO_ROOT) not in sys.path:
 from core.compiler.provenance import verify_provenance
 from core.compiler.contract_engine import ContractEngine
 from core.compiler.cli_output import emit_json_envelope
+from core.compiler.live_bridge import LiveAuditReceipt, LiveBridgeError, MaxLiveBridge
 
 # Formato canonico de linea de Max.log:  [YYYY-MM-DD HH:MM:SS.ffffff level] [pid] mensaje
 LOG_LINE_RE = re.compile(
@@ -443,6 +444,17 @@ def load_session_lines(max_log: Optional[Path], launched_after: float) -> Option
     return session or None
 
 
+def _detect_console_errors(lines: Sequence[str]) -> List[str]:
+    detected_errors: List[str] = []
+    for line in lines:
+        parsed = parse_log_line(line)
+        level = parsed["level"].lower() if parsed else ""
+        lowered = line.lower()
+        if level in FAIL_LEVELS or any(pattern in lowered for pattern in FAIL_PATTERNS):
+            detected_errors.append(line)
+    return detected_errors
+
+
 def evaluate_session(lines: List[str]) -> Tuple[str, List[str]]:
     """
     Evalua la sesion de log y devuelve (veredicto, detalle).
@@ -453,14 +465,7 @@ def evaluate_session(lines: List[str]) -> Tuple[str, List[str]]:
     if not lines:
         return "BLOCKED", ["Sesion de log vacia: no hay evidencia de ejecucion."]
 
-    detected_errors = []
-    for line in lines:
-        parsed = parse_log_line(line)
-        level = parsed["level"].lower() if parsed else ""
-        lowered = line.lower()
-        if level in FAIL_LEVELS or any(pattern in lowered for pattern in FAIL_PATTERNS):
-            detected_errors.append(line)
-
+    detected_errors = _detect_console_errors(lines)
     if detected_errors:
         return "FAIL", detected_errors
 
@@ -483,6 +488,29 @@ def evaluate_session(lines: List[str]) -> Tuple[str, List[str]]:
         )
 
     return "PASS", details
+
+
+def evaluate_live_receipt(receipt: LiveAuditReceipt) -> Tuple[str, List[str]]:
+    """Evalua de forma fail-closed la telemetria devuelta por un puente vivo en Max."""
+    if not receipt.loaded or not receipt.runtime.strip():
+        return "BLOCKED", [
+            f"BLOCKED (RUNTIME_UNAVAILABLE): Puente vivo en {receipt.endpoint} no reporto carga verificable del patcher.",
+            "Sin confirmacion de carga en runtime real: prohibido emitir PASS.",
+        ]
+
+    if receipt.failed_objects:
+        return "FAIL", [f"Objeto fallido en runtime: {obj}" for obj in receipt.failed_objects]
+
+    detected_errors = _detect_console_errors(receipt.console_lines)
+    if detected_errors:
+        return "FAIL", detected_errors
+
+    return "PASS", [
+        f"Puente vivo verificado ({receipt.runtime} via {receipt.endpoint}): "
+        f"{len(receipt.console_lines)} lineas de consola, 0 errores.",
+        "Alcance: errores de consola y contratos de objetos durante la carga del patcher.",
+        "No certifica equivalencia DSP, comportamiento en tiempo real ni fallos silenciosos (ver I11).",
+    ]
 
 
 def _terminate_process_tree(proc: Any) -> None:
@@ -523,9 +551,41 @@ def _terminate_process_tree(proc: Any) -> None:
             pass
 
 
+def _append_static_gate_details(
+    details: List[str],
+    prov_verdict: Optional[str],
+    contract_violations: Optional[List[str]],
+    contract_checked: int,
+) -> None:
+    if prov_verdict == "VALID":
+        details.append(
+            "Procedencia verificada: emitted-from.json certifica los contratos y la "
+            "integridad de los artefactos emitidos."
+        )
+    elif prov_verdict is None:
+        details.append(
+            f"Sin {PROVENANCE_RECORD_NAME} junto al patcher: la procedencia no fue certificada."
+        )
+
+    if contract_violations is None:
+        details.append(
+            "Contratos no evaluados: el archivo no expone un contenedor 'patcher' nativo de Max."
+        )
+    elif contract_checked:
+        details.append(
+            f"Contratos verificados: {contract_checked} conexiones evaluadas contra "
+            f"{CONTRACTS_SCHEMA_PATH}, 0 ilegales."
+        )
+    else:
+        details.append(
+            f"Contratos verificados: 0 patchcords que evaluar en {CONTRACTS_SCHEMA_PATH}."
+        )
+
+
 def audit_patcher_live(
     patcher_path: Path, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     *, ir_path: Optional[Path] = None,
+    live_endpoint: Optional[str] = None,
 ) -> Tuple[str, List[str]]:
     """
     Ejecuta el patcher en Max.exe y audita la sesion de log resultante.
@@ -598,6 +658,24 @@ def audit_patcher_live(
         ]
 
     # Recien aqui se requiere el runtime: las puertas estaticas ya aprobaron.
+    if live_endpoint is not None:
+        try:
+            with MaxLiveBridge(
+                live_endpoint,
+                contract_engine=engine,
+                timeout=max(float(timeout_seconds), 1.0),
+            ) as bridge:
+                receipt = bridge.audit_patcher(patcher_path, timeout_seconds=timeout_seconds)
+        except (LiveBridgeError, OSError) as exc:
+            return "BLOCKED", [
+                f"BLOCKED (RUNTIME_UNAVAILABLE): Puente vivo no disponible en {live_endpoint} ({exc}).",
+                "Contrato Harmos: Prohibido emitir PASS sin ejecucion en vivo.",
+            ]
+
+        verdict, details = evaluate_live_receipt(receipt)
+        _append_static_gate_details(details, prov_verdict, contract_violations, contract_checked)
+        return verdict, details
+
     max_exe = resolve_max_executable()
     if not max_exe:
         return "BLOCKED", [
@@ -654,31 +732,7 @@ def audit_patcher_live(
         ]
 
     verdict, details = evaluate_session(session_lines)
-
-    if prov_verdict == "VALID":
-        details.append(
-            "Procedencia verificada: emitted-from.json certifica los contratos y la "
-            "integridad de los artefactos emitidos."
-        )
-    elif prov_verdict is None:
-        details.append(
-            f"Sin {PROVENANCE_RECORD_NAME} junto al patcher: la procedencia no fue certificada."
-        )
-
-    if contract_violations is None:
-        details.append(
-            "Contratos no evaluados: el archivo no expone un contenedor 'patcher' nativo de Max."
-        )
-    elif contract_checked:
-        details.append(
-            f"Contratos verificados: {contract_checked} conexiones evaluadas contra "
-            f"{CONTRACTS_SCHEMA_PATH}, 0 ilegales."
-        )
-    else:
-        details.append(
-            f"Contratos verificados: 0 patchcords que evaluar en {CONTRACTS_SCHEMA_PATH}."
-        )
-
+    _append_static_gate_details(details, prov_verdict, contract_violations, contract_checked)
     return verdict, details
 
 
@@ -698,6 +752,12 @@ def build_parser() -> argparse.ArgumentParser:
              "La auditoria termina antes si Max completa la carga.",
     )
     parser.add_argument(
+        "--live-endpoint",
+        type=str,
+        default=None,
+        help="Endpoint WebSocket loopback de un puente vivo en Max (ej. ws://127.0.0.1:7400)",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         default=False,
@@ -714,7 +774,12 @@ def main(argv: Optional[List[str]] = None):
     patcher = Path(args.patcher)
     if args.json_output:
         with contextlib.redirect_stdout(io.StringIO()):
-            verdict, details = audit_patcher_live(patcher, timeout_seconds=args.timeout, ir_path=args.ir)
+            verdict, details = audit_patcher_live(
+                patcher,
+                timeout_seconds=args.timeout,
+                ir_path=args.ir,
+                live_endpoint=args.live_endpoint,
+            )
         exit_code = 0 if verdict == "PASS" else (2 if verdict == "BLOCKED" else 1)
         emit_json_envelope(
             status=verdict,
@@ -722,13 +787,19 @@ def main(argv: Optional[List[str]] = None):
             artifacts={
                 "patcher": str(patcher),
                 "ir": str(args.ir) if args.ir else None,
+                "live_endpoint": args.live_endpoint,
             },
             diagnostics=list(details),
             exit_code=exit_code,
         )
         sys.exit(exit_code)
 
-    verdict, details = audit_patcher_live(patcher, timeout_seconds=args.timeout, ir_path=args.ir)
+    verdict, details = audit_patcher_live(
+        patcher,
+        timeout_seconds=args.timeout,
+        ir_path=args.ir,
+        live_endpoint=args.live_endpoint,
+    )
 
     print("\n" + "=" * 50)
     print(f" HARMOS LIVE AUDIT: {verdict}")
