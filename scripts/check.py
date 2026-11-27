@@ -3,20 +3,24 @@
 Harmos Guardrail & Pre-Commit Verifier.
 Verifica de forma determinista antes de cada commit o PR:
 1. Suite completa de tests unitarios (tests/).
-2. Escaneo estatico de PII, rutas absolutas de host y secretos.
-3. Sintaxis JSON y estructura del catalogo de contratos (no JSON Schema general).
+2. Sintaxis JSON y estructura del catalogo de contratos (no JSON Schema general).
+3. Escaneo estatico de PII, rutas absolutas de host y secretos.
 """
-import sys
-import os
-import subprocess
-import re
+import argparse
+import contextlib
+import io
 import json
+import re
+import subprocess
+import sys
 from pathlib import Path
+from typing import Dict, List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from core.compiler.cli_output import emit_json_envelope
 from core.compiler.contract_engine import validate_contracts
 
 # Patrones prohibidos en archivos trackeados
@@ -140,7 +144,49 @@ def scan_for_leaks_and_pii(repo_root: Path = None) -> bool:
     return False
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Harmos Pre-Commit Guardrail & Verifier")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        dest="json_output",
+        help="Emitir salida estructurada en formato JSON uniforme",
+    )
+    return parser
+
+
+def main(argv: Optional[List[str]] = None):
+    args = build_parser().parse_args(argv)
+
+    if args.json_output:
+        checks_ordered = (
+            ("unit_tests", run_unit_tests),
+            ("json_schemas", validate_json_schemas),
+            ("privacy_scan", scan_for_leaks_and_pii),
+        )
+        results: Dict[str, bool] = {}
+        diagnostics: List[str] = []
+        for check_key, fn in checks_ordered:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                results[check_key] = bool(fn())
+            for raw_line in buf.getvalue().splitlines():
+                stripped = raw_line.strip()
+                if stripped:
+                    diagnostics.append(stripped)
+
+        passed = all(results.values())
+        exit_code = 0 if passed else 1
+        emit_json_envelope(
+            status="PASS" if passed else "FAIL",
+            command="check",
+            artifacts={"checks": results},
+            diagnostics=diagnostics,
+            exit_code=exit_code,
+        )
+        sys.exit(exit_code)
+
     print("==================================================")
     print("   HARMOS PRE-COMMIT GUARDRAIL & VERIFIER         ")
     print("==================================================\n")

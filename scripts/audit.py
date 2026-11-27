@@ -33,6 +33,8 @@ import json
 import signal
 import time
 import argparse
+import contextlib
+import io
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +48,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from core.compiler.provenance import verify_provenance
 from core.compiler.contract_engine import ContractEngine
+from core.compiler.cli_output import emit_json_envelope
 
 # Formato canonico de linea de Max.log:  [YYYY-MM-DD HH:MM:SS.ffffff level] [pid] mensaje
 LOG_LINE_RE = re.compile(
@@ -679,7 +682,8 @@ def audit_patcher_live(
     return verdict, details
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    """Construye el parser CLI de auditoria en vivo de Harmos."""
     parser = argparse.ArgumentParser(description="Harmos Live Runtime Verifier")
     parser.add_argument("--patcher", type=str, required=True, help="Ruta al archivo .maxpat objetivo")
     parser.add_argument(
@@ -693,9 +697,37 @@ def main():
         help=f"Segundos maximos de espera para la sesion de Max.log (default: {DEFAULT_TIMEOUT_SECONDS}). "
              "La auditoria termina antes si Max completa la carga.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        dest="json_output",
+        help="Emitir salida estructurada en formato JSON uniforme",
+    )
+    return parser
+
+
+def main(argv: Optional[List[str]] = None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     patcher = Path(args.patcher)
+    if args.json_output:
+        with contextlib.redirect_stdout(io.StringIO()):
+            verdict, details = audit_patcher_live(patcher, timeout_seconds=args.timeout, ir_path=args.ir)
+        exit_code = 0 if verdict == "PASS" else (2 if verdict == "BLOCKED" else 1)
+        emit_json_envelope(
+            status=verdict,
+            command="audit",
+            artifacts={
+                "patcher": str(patcher),
+                "ir": str(args.ir) if args.ir else None,
+            },
+            diagnostics=list(details),
+            exit_code=exit_code,
+        )
+        sys.exit(exit_code)
+
     verdict, details = audit_patcher_live(patcher, timeout_seconds=args.timeout, ir_path=args.ir)
 
     print("\n" + "=" * 50)

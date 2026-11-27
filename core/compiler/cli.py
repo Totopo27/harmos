@@ -3,13 +3,18 @@ Harmos CLI Compiler: Sintetizador de paquetes Max MSP a partir de Representacion
 Genera parches .maxpat validados con TypedPatch y esqueletos C++ Min-Devkit con CMakeLists.txt.
 """
 import argparse
+import contextlib
+import dataclasses
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional, Tuple
+
+from core.compiler.cli_output import emit_json_envelope
 
 from core.compiler.typed_patch import TypedPatch
 from core.compiler.contract_engine import ContractEngine
@@ -357,58 +362,85 @@ def compile_ir(
 # Subcommand Dispatch Handlers
 # =============================================================================
 
-def _dispatch_compile(args: argparse.Namespace) -> int:
+_SUBCOMMANDS = (
+    "compile",
+    "extract",
+    "verify-provenance",
+    "bench",
+    "harvest",
+    "diff",
+    "doc",
+)
+
+_DispatchResult = Tuple[int, str, Dict[str, Any], List[str]]
+
+
+def _dispatch_compile(args: argparse.Namespace) -> _DispatchResult:
     build_native = not args.no_build
     res = compile_ir(args.ir_file, args.out, source_path=args.source, build=build_native)
-    print(f"Compilacion exitosa para: {res['object_name']}")
-    print(f"  Patcher de prueba: {res['maxpat_path']}")
-    print(f"  Fuente C++:        {res['cpp_path']}")
-    print(f"  CMakeLists:        {res['cmake_path']}")
-    print(f"  Maxref XML:        {res['maxref_path']}")
-    print(f"  Procedencia:       {res['provenance_path']}")
-    if res.get("external_path"):
-        print(f"  External nativo:   {res['external_path']}")
-    return 0
+    if not getattr(args, "json_output", False):
+        print(f"Compilacion exitosa para: {res['object_name']}")
+        print(f"  Patcher de prueba: {res['maxpat_path']}")
+        print(f"  Fuente C++:        {res['cpp_path']}")
+        print(f"  CMakeLists:        {res['cmake_path']}")
+        print(f"  Maxref XML:        {res['maxref_path']}")
+        print(f"  Procedencia:       {res['provenance_path']}")
+        if res.get("external_path"):
+            print(f"  External nativo:   {res['external_path']}")
+    return 0, "PASS", dict(res), []
 
 
-def _dispatch_doc(args: argparse.Namespace) -> int:
+def _dispatch_doc(args: argparse.Namespace) -> _DispatchResult:
     out_file = handle_doc(args.ir_file, output_path=args.out, author=args.author)
-    print(f"Documentacion Maxref generada con exito: {out_file}")
-    return 0
+    if not getattr(args, "json_output", False):
+        print(f"Documentacion Maxref generada con exito: {out_file}")
+    return 0, "PASS", {"maxref_path": str(out_file)}, []
 
 
-def _dispatch_extract(args: argparse.Namespace) -> int:
+def _dispatch_extract(args: argparse.Namespace) -> _DispatchResult:
     res = handle_extract(args.source_file, args.out, object_name=args.name)
-    print(f"Extraccion exitosa para: {res['object_name']}")
-    print(f"  Archivo IR generado: {res['ir_path']}")
-    return 0
+    if not getattr(args, "json_output", False):
+        print(f"Extraccion exitosa para: {res['object_name']}")
+        print(f"  Archivo IR generado: {res['ir_path']}")
+    return 0, "PASS", {"object_name": res["object_name"], "ir_path": str(res["ir_path"])}, []
 
 
-def _dispatch_verify_provenance(args: argparse.Namespace) -> int:
+def _dispatch_verify_provenance(args: argparse.Namespace) -> _DispatchResult:
     verdict, details = verify_provenance(args.path, current_ir_path=args.ir, current_source_path=args.source)
-    print(f"\nHARMOS PROVENANCE: {verdict}")
-    for d in details:
-        print(f"  {d}")
-    return 0 if verdict == "VALID" else 1
+    if not getattr(args, "json_output", False):
+        print(f"\nHARMOS PROVENANCE: {verdict}")
+        for d in details:
+            print(f"  {d}")
+    exit_code = 0 if verdict == "VALID" else 1
+    return exit_code, verdict, {"path": str(args.path)}, list(details)
 
 
-def _dispatch_bench(args: argparse.Namespace) -> int:
+def _dispatch_bench(args: argparse.Namespace) -> _DispatchResult:
     from core.compiler.benchmark import get_standard_benchmarks, format_benchmark_report
     suites = get_standard_benchmarks(args.suite)
-    print("\n" + format_benchmark_report(suites))
-    return 1 if any(v.verdict != "SHIP" for v in suites) else 0
+    if not getattr(args, "json_output", False):
+        print("\n" + format_benchmark_report(suites))
+    exit_code = 1 if any(v.verdict != "SHIP" for v in suites) else 0
+    status = "SHIP" if exit_code == 0 else "NO_SHIP"
+    artifacts = {
+        "suite": args.suite,
+        "results": [dataclasses.asdict(v) for v in suites],
+    }
+    diagnostics = [f"{v.name}: {v.verdict}" for v in suites]
+    return exit_code, status, artifacts, diagnostics
 
 
-def _dispatch_harvest(args: argparse.Namespace) -> int:
+def _dispatch_harvest(args: argparse.Namespace) -> _DispatchResult:
     from benchmarks.suites import harvest_suite_cases
 
     cases = harvest_suite_cases(args.suite, tolerance=args.tolerance)
     count = write_cases_jsonl(cases, args.out)
-    print(f"Cosecha exitosa: {count} casos guardados en '{args.out}'.")
-    return 0
+    if not getattr(args, "json_output", False):
+        print(f"Cosecha exitosa: {count} casos guardados en '{args.out}'.")
+    return 0, "PASS", {"suite": args.suite, "out": str(args.out), "case_count": count}, []
 
 
-def _dispatch_diff(args: argparse.Namespace) -> int:
+def _dispatch_diff(args: argparse.Namespace) -> _DispatchResult:
     cases = read_cases_jsonl(args.cases)
     if getattr(args, "cpp_kernel", None):
         from core.compiler.cpp_headless_runner import run_headless_cases
@@ -423,22 +455,41 @@ def _dispatch_diff(args: argparse.Namespace) -> int:
 
         report = evaluate_diff(cases, get_diff_registry(args.suite))
 
-    print("\n" + "=" * 50)
-    print(f" HARMOS ORACLE DIFF: {report.verdict} (SEMANTIC)")
-    print("=" * 50)
-    for d in report.details:
-        print(f"  {d}")
-    if report.failures:
-        print("\n  Fallas detectadas:")
-        for f in report.failures[:10]:
-            print(f"    - {f.case.fn}{tuple(f.case.args)}: {f.reason}")
-    print("-" * 50)
-    return 0 if report.verdict == "PASS" else 1
+    if not getattr(args, "json_output", False):
+        print("\n" + "=" * 50)
+        print(f" HARMOS ORACLE DIFF: {report.verdict} (SEMANTIC)")
+        print("=" * 50)
+        for d in report.details:
+            print(f"  {d}")
+        if report.failures:
+            print("\n  Fallas detectadas:")
+            for f in report.failures[:10]:
+                print(f"    - {f.case.fn}{tuple(f.case.args)}: {f.reason}")
+        print("-" * 50)
+
+    exit_code = 0 if report.verdict == "PASS" else 1
+    artifacts = {
+        "cases": str(args.cases),
+        "suite": args.suite,
+        "cpp_kernel": str(args.cpp_kernel) if args.cpp_kernel else None,
+        "failure_count": len(report.failures),
+    }
+    diagnostics = list(report.details) + [
+        f"{f.case.fn}{tuple(f.case.args)}: {f.reason}" for f in report.failures[:10]
+    ]
+    return exit_code, report.verdict, artifacts, diagnostics
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Construye el parser de línea de comandos con todos los subcomandos de Harmos."""
     parser = argparse.ArgumentParser(description="Harmos CLI: Compilador y extractor de especificaciones IR hacia Max MSP.")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        dest="json_output",
+        help="Emitir salida estructurada en formato JSON uniforme",
+    )
     subparsers = parser.add_subparsers(dest="command", help="Comando a ejecutar")
 
     # compile
@@ -447,28 +498,33 @@ def build_parser() -> argparse.ArgumentParser:
     compile_parser.add_argument("--out", default="./build_harmos", help="Directorio destino de generación")
     compile_parser.add_argument("--source", default=None, help="Ruta al código fuente original (opcional para procedencia)")
     compile_parser.add_argument("--no-build", action="store_true", default=False, help="Emitir solo archivos fuente sin compilar el binario nativo")
+    compile_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     # extract
     extract_parser = subparsers.add_parser("extract", help="Extraer una especificación IR desde código fuente (TypeScript/JS)")
     extract_parser.add_argument("source_file", help="Ruta al archivo fuente (.ts / .js)")
     extract_parser.add_argument("--out", required=True, help="Ruta del archivo IR destino (.ir.json)")
     extract_parser.add_argument("--name", default=None, help="Nombre del objeto en Max (ej. harmos.gain_meter)")
+    extract_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     # verify-provenance
     verify_prov_parser = subparsers.add_parser("verify-provenance", help="Verificar la validez de la huella emitted-from.json")
     verify_prov_parser.add_argument("path", help="Ruta al archivo emitted-from.json o al directorio generado")
     verify_prov_parser.add_argument("--ir", default=None, help="Ruta al archivo IR actual (opcional)")
     verify_prov_parser.add_argument("--source", default=None, help="Ruta al código fuente actual (opcional)")
+    verify_prov_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     # bench
     bench_parser = subparsers.add_parser("bench", help="Evaluar presupuestos de rendimiento en tiempo real (SHIP / NO_SHIP)")
     bench_parser.add_argument("--suite", choices=["truax", "tables", "all"], default="all", help="Suite a evaluar")
+    bench_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     # harvest
     harvest_parser = subparsers.add_parser("harvest", help="Cosechar vectores de prueba semanticos hacia cases.jsonl")
     harvest_parser.add_argument("--suite", choices=["truax", "wilson", "hexslider"], default="truax", help="Suite estandar a cosechar")
     harvest_parser.add_argument("--out", required=True, help="Ruta del archivo destino (cases.jsonl)")
     harvest_parser.add_argument("--tolerance", type=float, default=1e-7, help="Tolerancia numerica float")
+    harvest_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     # diff
     diff_parser = subparsers.add_parser("diff", help="Evaluar equivalencia semantica de cases.jsonl contra un target")
@@ -477,24 +533,31 @@ def build_parser() -> argparse.ArgumentParser:
     diff_parser.add_argument("--cpp-kernel", help="Ruta al header de kernel C++ puro (*_kernel.hpp) para evaluacion headless en CI")
     diff_parser.add_argument("--kernel-class", choices=["wilson", "control", "dsp", "hexslider", "truax"], default="wilson", help="Tipo de arnes C++ a generar")
     diff_parser.add_argument("--kernel-type-name", help="Nombre exacto del tipo C++ (para control/dsp)")
+    diff_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     # doc
     doc_parser = subparsers.add_parser("doc", help="Generar documentacion canonica .maxref.xml a partir de una IR (.ir.json)")
     doc_parser.add_argument("ir_file", help="Ruta al archivo de especificacion IR (.ir.json)")
     doc_parser.add_argument("--out", default=None, help="Ruta de destino del archivo .maxref.xml o directorio docs/")
     doc_parser.add_argument("--author", default="Harmos Meta-Compiler", help="Nombre del autor para metadatos XML")
+    doc_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, dest="json_output", help="Emitir salida estructurada en formato JSON uniforme")
 
     return parser
 
 
-def main():
+def main(argv: Optional[List[str]] = None):
     parser = build_parser()
 
-    # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
-    if len(sys.argv) > 1 and sys.argv[1] not in ["compile", "extract", "verify-provenance", "bench", "harvest", "diff", "doc", "-h", "--help"]:
-        sys.argv.insert(1, "compile")
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
 
-    args = parser.parse_args()
+    # Compatibilidad con sintaxis directa previa: 'harmos <ir_file> --out <dir>'
+    for idx, tok in enumerate(raw_argv):
+        if tok != "--json":
+            if tok not in _SUBCOMMANDS and tok not in ("-h", "--help"):
+                raw_argv.insert(idx, "compile")
+            break
+
+    args = parser.parse_args(raw_argv)
 
     dispatch_table = {
         "compile": _dispatch_compile,
@@ -507,16 +570,46 @@ def main():
     }
 
     handler = dispatch_table.get(args.command)
+    json_output = bool(getattr(args, "json_output", False))
     if not handler:
+        if json_output:
+            emit_json_envelope(
+                status="ERROR",
+                command="cli",
+                artifacts={},
+                diagnostics=["No command specified"],
+                exit_code=1,
+            )
+            sys.exit(1)
         parser.print_help()
         sys.exit(0)
 
     try:
-        exit_code = handler(args)
+        if json_output:
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code, status, artifacts, diagnostics = handler(args)
+            emit_json_envelope(
+                status=status,
+                command=args.command,
+                artifacts=artifacts,
+                diagnostics=diagnostics,
+                exit_code=exit_code,
+            )
+        else:
+            exit_code, _, _, _ = handler(args)
         if exit_code != 0:
             sys.exit(exit_code)
     except Exception as e:
-        print(f"Error durante la ejecucion: {e}", file=sys.stderr)
+        if json_output:
+            emit_json_envelope(
+                status="ERROR",
+                command=args.command or "cli",
+                artifacts={},
+                diagnostics=[str(e)],
+                exit_code=1,
+            )
+        else:
+            print(f"Error durante la ejecucion: {e}", file=sys.stderr)
         sys.exit(1)
 
 
